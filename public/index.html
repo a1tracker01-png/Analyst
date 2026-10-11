@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ViralRadar AI — Instagram Tech & AI Competitor Intelligence</title>
+  <meta name="description" content="100% Free-tier Instagram competitor analysis and fast-boom viral alert dashboard tailored for Tech & AI content creators.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- App Container -->
+  <div class="app-layout">
+    
+    <!-- Header / Navbar -->
+    <header class="app-header" id="mainHeader">
+      <div class="header-branding">
+        <div class="brand-logo-badge">
+          <span class="logo-icon">⚡</span>
+          <div class="brand-text">
+            <span class="brand-title">VIRAL<span class="accent-glow">RADAR</span></span>
+            <span class="brand-sub">Tech & AI Creator Intelligence</span>
+          </div>
+        </div>
+        <div class="zero-cost-badge" title="100% Free-Tier & Open-Source. No subscriptions or credit cards required.">
+          <span class="status-dot pulse"></span>
+          <span class="badge-text">100% LIFELONG FREE TIER</span>
+        </div>
+      </div>
+
+      <!-- Quick KPI Stats Bar -->
+      <div class="header-kpis" id="headerKpis">
+        <div class="kpi-pill">
+          <span class="kpi-label">Competitors</span>
+          <span class="kpi-val" id="kpiCompetitorsCount">0</span>
+        </div>
+        <div class="kpi-pill kpi-boom">
+          <span class="kpi-label">Fast-Boom (24-48h)</span>
+          <span class="kpi-val" id="kpiBoomCount">0</span>
+        </div>
+        <div class="kpi-pill">
+          <span class="kpi-label">Peak Velocity</span>
+          <span class="kpi-val" id="kpiPeakVelocity">0 v/h</span>
+        </div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="header-actions">
+        <button class="btn btn-secondary" id="btnExportCsv" title="Export current dataset to CSV">
+          <span class="btn-icon">📥</span> Export CSV
+        </button>
+        <button class="btn btn-secondary" id="btnRefreshAll" title="Refresh all competitor feeds">
+          <span class="btn-icon">🔄</span> Refresh
+        </button>
+        <button class="btn btn-primary" id="btnOpenAddModal">
+          <span class="btn-icon">+</span> Add Competitor
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Navigation Bar -->
+    <nav class="main-nav" id="mainNavBar">
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="reels" id="tabNavReels">
+          <span class="tab-icon">📊</span>
+          <span class="tab-label">Reels Feed</span>
+          <span class="tab-badge" id="reelsCountBadge">0</span>
+        </button>
+        <button class="nav-tab" data-tab="fastboom" id="tabNavFastBoom">
+          <span class="tab-icon">⚡</span>
+          <span class="tab-label">Fast-Boom Alerts</span>
+          <span class="tab-badge pulse-badge" id="fastBoomCountBadge">0</span>
+        </button>
+        <button class="nav-tab" data-tab="competitors" id="tabNavCompetitors">
+          <span class="tab-icon">👥</span>
+          <span class="tab-label">Competitors</span>
+          <span class="tab-badge" id="competitorsCountBadge">0</span>
+        </button>
+        <button class="nav-tab" data-tab="discovery" id="tabNavDiscovery">
+          <span class="tab-icon">🚀</span>
+          <span class="tab-label">Tech & AI Discovery</span>
+          <span class="tab-badge glow-badge">8 Emerging</span>
+        </button>
+        <button class="nav-tab" data-tab="vault" id="tabNavVault">
+          <span class="tab-icon">💡</span>
+          <span class="tab-label">Replication Vault</span>
+          <span class="tab-badge" id="vaultCountBadge">0</span>
+        </button>
+        <button class="nav-tab" data-tab="scraper" id="tabNavScraper">
+          <span class="tab-icon">⚙️</span>
+          <span class="tab-label">Free Scraper Engine</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- App Body Content Area -->
+    <main class="app-main">
+      
+      <!-- ============================================================ -->
+      <!-- TAB 1: REELS FEED (FILTERING & SORTING)                       -->
+      <!-- ============================================================ -->
+      <section class="tab-pane active" id="paneReels">
+        
+        <!-- Controls Toolbar -->
+        <div class="controls-toolbar">
+          
+          <!-- Timeframe Segmented Chips -->
+          <div class="toolbar-group">
+            <span class="filter-label">TIMEFRAME:</span>
+            <div class="pill-group" id="timeframePills">
+              <button class="pill-btn active" data-timeframe="24h" id="tf24h">
+                <span class="pill-dot"></span> Past 24 Hours
+              </button>
+              <button class="pill-btn" data-timeframe="2d" id="tf2d">Past 2 Days</button>
+              <button class="pill-btn" data-timeframe="4d" id="tf4d">Past 4 Days</button>
+              <button class="pill-btn" data-timeframe="1w" id="tf1w">Past 1 Week</button>
+              <button class="pill-btn" data-timeframe="all" id="tfall">All Time</button>
+            </div>
+          </div>
+
+          <!-- Sorting & Creator Filters -->
+          <div class="toolbar-group secondary-group">
+            <div class="select-wrapper">
+              <label for="sortSelector" class="filter-label">SORT BY:</label>
+              <select id="sortSelector" class="custom-select">
+                <option value="views" selected>🔥 Most Popular (Views)</option>
+                <option value="velocity">⚡ Fast Velocity (Views/Hr)</option>
+                <option value="engagement">📈 Highest Engagement Rate</option>
+                <option value="viralScore">🌟 Viral Outlier Score</option>
+                <option value="likes">❤️ Most Likes</option>
+                <option value="recent">⏱️ Newest First</option>
+              </select>
+            </div>
+
+            <div class="select-wrapper">
+              <label for="creatorFilter" class="filter-label">CREATOR:</label>
+              <select id="creatorFilter" class="custom-select">
+                <option value="all">All Competitors</option>
+              </select>
+            </div>
+
+            <!-- Instant Search Input -->
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="reelsSearchInput" placeholder="Filter by topic, AI model, keyword..." autocomplete="off">
+              <button id="btnClearSearch" class="btn-clear" style="display: none;">✕</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Timeframe & Filter Context Banner -->
+        <div class="filter-status-strip" id="filterStatusStrip">
+          <div class="status-summary">
+            Showing <strong id="visibleReelsCount">0</strong> reels for <span class="tag-highlight" id="timeframeDisplayTag">Past 24 Hours</span> sorted by <span class="tag-highlight" id="sortDisplayTag">Most Popular (Views)</span>
+          </div>
+          <div class="status-legend">
+            <span class="legend-chip supernova">🔥 Supernova (&gt;2.5x)</span>
+            <span class="legend-chip fastboom">⚡ Fast Boom</span>
+            <span class="legend-chip rising">🚀 Trending</span>
+          </div>
+        </div>
+
+        <!-- Reels Grid View -->
+        <div class="reels-grid" id="reelsGrid">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Scanning Instagram feeds across Tech & AI competitors...</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- TAB 2: VIRAL FAST-BOOM RADAR                                  -->
+      <!-- ============================================================ -->
+      <section class="tab-pane" id="paneFastboom">
+        
+        <!-- Fast-Boom Header Banner -->
+        <div class="fastboom-hero">
+          <div class="hero-left">
+            <div class="hero-badge">
+              <span class="live-ping"></span> LIVE VELOCITY RADAR
+            </div>
+            <h1 class="hero-title">Early-Stage Viral Breakout Detector</h1>
+            <p class="hero-desc">
+              Tracks reels picking up acceleration in short windows (high views-per-hour relative to post age and account average). Jump on these trending topics before your competition catches up.
+            </p>
+          </div>
+          <div class="hero-stats-grid">
+            <div class="hero-stat-card supernova-border">
+              <span class="hero-stat-icon">🔥</span>
+              <div class="hero-stat-meta">
+                <span class="hero-stat-num" id="boomStatSupernova">0</span>
+                <span class="hero-stat-text">Supernova Outliers</span>
+              </div>
+            </div>
+            <div class="hero-stat-card fastboom-border">
+              <span class="hero-stat-icon">⚡</span>
+              <div class="hero-stat-meta">
+                <span class="hero-stat-num" id="boomStatFastBoom">0</span>
+                <span class="hero-stat-text">Fast-Boom Alerts</span>
+              </div>
+            </div>
+            <div class="hero-stat-card early-border">
+              <span class="hero-stat-icon">⏱️</span>
+              <div class="hero-stat-meta">
+                <span class="hero-stat-num" id="boomStatEarly">0</span>
+                <span class="hero-stat-text">Early Signals (&lt;48h)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fast Boom List -->
+        <div class="fastboom-grid" id="fastBoomGrid">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Calculating velocity vectors and outlier multipliers...</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- TAB 3: COMPETITORS MANAGEMENT DASHBOARD                       -->
+      <!-- ============================================================ -->
+      <section class="tab-pane" id="paneCompetitors">
+        
+        <div class="section-header-block">
+          <div>
+            <h2 class="section-title">Tracked Tech & AI Competitors</h2>
+            <p class="section-subtitle">Manage your competitor watchlist dynamically. Profiles and reels are refreshed with zero ongoing API costs.</p>
+          </div>
+          <button class="btn btn-primary" id="btnShowAddCompFromTab">
+            <span class="btn-icon">+</span> Track New Username
+          </button>
+        </div>
+
+        <!-- Inline Quick Add Input Bar -->
+        <div class="quick-add-bar">
+          <span class="input-prefix">instagram.com/</span>
+          <input type="text" id="quickAddInput" placeholder="Enter username (e.g. levelsio, theaiadvantage, sama...)" autocomplete="off">
+          <button class="btn btn-primary" id="btnQuickAdd">
+            <span class="btn-icon">⚡</span> Add to Watchlist
+          </button>
+        </div>
+
+        <!-- Competitor Cards Grid -->
+        <div class="competitors-grid" id="competitorsGrid">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading competitor profiles...</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- TAB 4: FAST-GROWING CREATOR DISCOVERY (TECH & AI)             -->
+      <!-- ============================================================ -->
+      <section class="tab-pane" id="paneDiscovery">
+        
+        <div class="discovery-hero">
+          <div class="hero-badge">
+            <span class="live-ping"></span> NICHE RADAR
+          </div>
+          <h2 class="section-title">Emerging & High-Growth Tech/AI Creators</h2>
+          <p class="section-subtitle">
+            Curated directory of breakout creators in Tech & AI. Discover why their reels are blowing up, what hooks they use, and add them to your competitor watchlist in 1 click.
+          </p>
+
+          <!-- Sub-Niche Category Chips -->
+          <div class="subniche-chips" id="discoveryNicheFilter">
+            <button class="subniche-chip active" data-niche="all">All Sub-Niches</button>
+            <button class="subniche-chip" data-niche="AI Automation">🤖 AI Automation & Agents</button>
+            <button class="subniche-chip" data-niche="Open Source">💻 Open Source & Local LLMs</button>
+            <button class="subniche-chip" data-niche="Prompt Engineering">🧠 Prompt Engineering</button>
+            <button class="subniche-chip" data-niche="AI Coding">⚡ AI Coding & DevTools</button>
+            <button class="subniche-chip" data-niche="Robotics">🦾 Humanoid Robotics</button>
+            <button class="subniche-chip" data-niche="Creative AI">🎨 Creative AI & Midjourney</button>
+            <button class="subniche-chip" data-niche="AI Tools">🔍 AI Tools & Discovery</button>
+          </div>
+        </div>
+
+        <!-- Discovery Grid -->
+        <div class="discovery-grid" id="discoveryGrid">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>Scanning rising creators in Tech & AI...</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- TAB 5: REPLICATION VAULT / SAVED IDEAS                        -->
+      <!-- ============================================================ -->
+      <section class="tab-pane" id="paneVault">
+        
+        <div class="section-header-block">
+          <div>
+            <h2 class="section-title">Replication Vault & Idea Board</h2>
+            <p class="section-subtitle">Your saved viral reels ready for script adaptation and replication in your own style.</p>
+          </div>
+          <button class="btn btn-secondary" id="btnClearVault" style="display: none;">Clear All</button>
+        </div>
+
+        <div class="vault-grid" id="vaultGrid">
+          <div class="empty-state">
+            <span class="empty-icon">💡</span>
+            <h3>No Saved Ideas Yet</h3>
+            <p>Click "⭐ Save to Vault" or "🚀 Replicate Blueprint" on any reel card to store it here for your content calendar.</p>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- TAB 6: FREE SCRAPER ENGINE CONFIG                             -->
+      <!-- ============================================================ -->
+      <section class="tab-pane" id="paneScraper">
+        
+        <div class="scraper-config-card">
+          <div class="config-header">
+            <div class="engine-indicator">
+              <span class="status-indicator-dot online"></span>
+              <div>
+                <h3>Zero-Cost Instagram Public Engine</h3>
+                <p>Configured for 100% free-tier & lifelong zero-cost operation.</p>
+              </div>
+            </div>
+            <div class="cost-pill">$0.00 / LIFETIME FREE</div>
+          </div>
+
+          <div class="config-details-grid">
+            <div class="config-box">
+              <h4>Active Scraping Pipeline</h4>
+              <ul class="pipeline-list">
+                <li>
+                  <span class="check-icon">✓</span>
+                  <div>
+                    <strong>Public Web Profile API</strong>
+                    <p>Uses Instagram's public endpoints with dynamic header spoofing (No account or API subscription required).</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="check-icon">✓</span>
+                  <div>
+                    <strong>Rate-Limit Shield & Cache Engine</strong>
+                    <p>Caches profiles and reels to preserve local quota and prevent IP rate-limiting.</p>
+                  </div>
+                </li>
+                <li>
+                  <span class="check-icon">✓</span>
+                  <div>
+                    <strong>Optional Apify Free-Tier ($5/mo credits)</strong>
+                    <p>If you have an Apify account, enter your free token below for extra throughput.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="config-box">
+              <h4>Optional Free-Tier Tokens</h4>
+              <div class="input-form-group">
+                <label for="apifyTokenInput">Apify Free Token (Optional):</label>
+                <input type="password" id="apifyTokenInput" placeholder="apify_api_..." autocomplete="off">
+                <small>Get a 100% free plan at apify.com (no credit card required).</small>
+              </div>
+
+              <div class="input-form-group">
+                <label for="rapidApiKeyInput">RapidAPI Free Plan Key (Optional):</label>
+                <input type="password" id="rapidApiKeyInput" placeholder="RapidAPI key..." autocomplete="off">
+              </div>
+
+              <button class="btn btn-primary" id="btnSaveScraperSettings">Save Settings</button>
+            </div>
+          </div>
+
+          <div class="architecture-banner">
+            <h4>🛡️ Why this setup is permanently zero-cost:</h4>
+            <p>
+              Unlike commercial analytics tools that charge $49-$199/month, ViralRadar connects directly to public Instagram web endpoints and maintains local competitor state in JSON flat-files on your computer. You never hit paywalls or surprise invoices.
+            </p>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span>⚡ ViralRadar AI — Tech & AI Competitor Intelligence</span>
+        <span class="footer-sep">•</span>
+        <span>100% Free-Tier & Open Source</span>
+      </div>
+      <div class="footer-right">
+        <span>Local Time: <span id="clockDisplay">--:--:--</span></span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: ADD COMPETITOR DYNAMICALLY                            -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="addCompetitorModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Track New Competitor</h3>
+        <button class="modal-close" id="btnCloseAddModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-help-text">
+          Enter any public Instagram handle. The zero-cost scraper will query public endpoints and index their recent reels.
+        </p>
+        <div class="form-group">
+          <label for="inputCompetitorHandle">Instagram Username:</label>
+          <div class="input-with-icon">
+            <span class="input-icon">@</span>
+            <input type="text" id="inputCompetitorHandle" placeholder="e.g. fireship_dev or levelsio" autofocus autocomplete="off">
+          </div>
+        </div>
+
+        <div class="modal-suggestions">
+          <span class="sugg-label">Popular in Tech & AI:</span>
+          <div class="sugg-tags">
+            <button class="sugg-tag" data-user="fireship_dev">@fireship_dev</button>
+            <button class="sugg-tag" data-user="levelsio">@levelsio</button>
+            <button class="sugg-tag" data-user="sama">@sama</button>
+            <button class="sugg-tag" data-user="theaiadvantage">@theaiadvantage</button>
+            <button class="sugg-tag" data-user="mattvidapro">@mattvidapro</button>
+            <button class="sugg-tag" data-user="yousef.ai">@yousef.ai</button>
+          </div>
+        </div>
+
+        <div class="modal-status-msg" id="addCompStatusMsg" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelAddModal">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitAddModal">
+          <span class="btn-icon">⚡</span> Track Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: REPLICATION BLUEPRINT & VIRAL BREAKDOWN               -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="blueprintModal">
+    <div class="modal-dialog modal-large">
+      <div class="modal-header">
+        <div class="modal-header-tag" id="blueprintHeaderTag">⚡ FAST-BOOM REPLICATION BLUEPRINT</div>
+        <button class="modal-close" id="btnCloseBlueprintModal">✕</button>
+      </div>
+      <div class="modal-body" id="blueprintModalBody">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCopyScript">
+          <span class="btn-icon">📋</span> Copy Script to Clipboard
+        </button>
+        <button class="btn btn-primary" id="btnSaveFromBlueprint">
+          <span class="btn-icon">⭐</span> Save to Replication Vault
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Script -->
+  <script src="app.js"></script>
+</body>
+</html>
