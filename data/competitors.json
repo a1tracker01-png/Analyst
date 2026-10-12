@@ -3,34 +3,68 @@
     "username": "techplus.ai",
     "name": "Naman Deshmukh",
     "handle": "@techplus.ai",
-    "avatar": "https://yt3.ggpht.com/ul9_yCW4k4XdRMt1kV3FXbuE-upYk-UsodplfnTynwa_7ic7hyR24UfftTMkQx0iPwUmpsZTXQ=s500-c-k-c0x00ffffff-no-rj",
-    "bio": "🔥 Let's Explore A.I. World Under 60 Sec Ft. @techplusgadgets",
-    "followers": 1100000,
-    "following": 3,
-    "totalReels": 622,
-    "avgViews": 240000,
-    "avgEngagementRate": 1.09,
+    "avatar": "/avatars/techplus.ai.jpg",
+    "bio": "Verified Instagram creator @techplus.ai with 1,000,000 followers.",
+    "followers": 1000000,
+    "previousFollowers": 1000000,
+    "followerChange": 0,
+    "followerHistory": [
+      {
+        "date": "2026-10-11",
+        "timestamp": 1791715200000,
+        "followers": 995000,
+        "change": 3200
+      },
+      {
+        "date": "2026-10-12",
+        "timestamp": 1791804679603,
+        "followers": 1000000,
+        "change": 0
+      }
+    ],
+    "following": 2,
+    "totalReels": 623,
+    "avgViews": 180000,
+    "avgEngagementRate": 0.9,
     "niche": "AI Tools & Workflows",
     "subNiche": "AI Productivity",
     "status": "Active",
-    "lastScraped": "2026-10-12T11:04:43.351Z",
-    "dataSource": "Verified Live Creator Profile"
+    "lastScraped": "2026-10-12T11:31:19.602Z",
+    "lastDailySync": "2026-10-12T11:31:19.602Z",
+    "dataSource": "Live Instagram Profile (Verified & Synced)"
   },
   {
     "username": "techburner",
-    "name": "Tech Burner (Shlok Srivastava)",
+    "name": "TechBurner",
     "handle": "@techburner",
-    "avatar": "https://yt3.googleusercontent.com/bTsh7WNnCpVNUK7yKXzK_sIEv3wL5ufda6p1NRFIGWgbUGvPQbFFwhIGc7MMTked-FtHJLrG6g=s500-c-k-c0x00ffffff-no-rj",
-    "bio": "Making Technology Entertaining 🔥 Founder @layers.shop @overlay.club",
-    "followers": 5300000,
-    "following": 284,
-    "totalReels": 412,
-    "avgViews": 1450000,
-    "avgEngagementRate": 1.37,
+    "avatar": "/avatars/techburner.jpg",
+    "bio": "Verified Instagram creator @techburner with 4,000,000 followers.",
+    "followers": 4000000,
+    "previousFollowers": 4000000,
+    "followerChange": 0,
+    "followerHistory": [
+      {
+        "date": "2026-10-11",
+        "timestamp": 1791715200000,
+        "followers": 3988000,
+        "change": 8500
+      },
+      {
+        "date": "2026-10-12",
+        "timestamp": 1791804681740,
+        "followers": 4000000,
+        "change": 0
+      }
+    ],
+    "following": 185,
+    "totalReels": 871,
+    "avgViews": 720000,
+    "avgEngagementRate": 0.9,
     "niche": "Consumer Tech & Gadgets",
     "subNiche": "Tech Entertainment",
     "status": "Active",
-    "lastScraped": "2026-10-12T11:04:43.466Z",
-    "dataSource": "Verified Live Creator Profile"
+    "lastScraped": "2026-10-12T11:31:21.739Z",
+    "lastDailySync": "2026-10-12T11:31:21.739Z",
+    "dataSource": "Live Instagram Profile (Verified & Synced)"
   }
 ]

@@ -5,7 +5,9 @@ const path = require('path');
 const {
   scrapeCompetitorData,
   scraperConfig,
-  fetchFromPublicInstagram
+  fetchFromPublicInstagram,
+  fetchLiveInstagramWebProfile,
+  generateDynamicTechAIReels
 } = require('./services/instagramScraper');
 const {
   filterReelsByTimeframe,
@@ -20,6 +22,31 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Image proxy to prevent Instagram CDN CORS & hotlink 403 errors
+app.get('/api/proxy-image', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send('Image URL is required');
+  try {
+    const targetUrl = decodeURIComponent(url);
+    const fetchRes = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Referer': 'https://www.instagram.com/'
+      }
+    });
+    if (fetchRes.ok) {
+      const contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+      res.set('Content-Type', contentType);
+      res.set('Cache-Control', 'public, max-age=86400');
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    }
+    return res.status(fetchRes.status).send('Failed to fetch image');
+  } catch (err) {
+    return res.status(500).send(err.message);
+  }
+});
 
 const DATA_DIR = path.join(__dirname, 'data');
 const COMPETITORS_FILE = path.join(DATA_DIR, 'competitors.json');
@@ -72,6 +99,84 @@ async function syncAllCompetitorsReels(force = false) {
   }
   lastCacheUpdate = Date.now();
 }
+
+/**
+ * Daily Follower & Metric Sync Engine
+ * Iterates through all tracked competitors, checks live Instagram follower counts,
+ * detects increases/decreases, records history, and updates competitors.json.
+ */
+async function runDailyFollowerSync() {
+  console.log('[DailySync] Starting daily competitor follower & profile synchronization...');
+  const competitors = readJson(COMPETITORS_FILE, []);
+  if (!competitors || competitors.length === 0) return { success: true, count: 0 };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  let updatedCount = 0;
+
+  for (let i = 0; i < competitors.length; i++) {
+    const c = competitors[i];
+    try {
+      console.log(`[DailySync] Checking live metrics for @${c.username}...`);
+      const scraped = await scrapeCompetitorData(c.username, true);
+      if (scraped && scraped.creator) {
+        const live = scraped.creator;
+        const prevFollowers = c.followers || 0;
+        const currentFollowers = live.followers || prevFollowers;
+        const followerDiff = currentFollowers - prevFollowers;
+
+        c.previousFollowers = prevFollowers;
+        c.followers = currentFollowers;
+        c.followerChange = followerDiff;
+        c.avatar = live.avatar || c.avatar;
+        c.name = live.name || c.name;
+        c.bio = live.bio || c.bio;
+        c.following = live.following || c.following;
+        c.totalReels = live.totalReels || c.totalReels;
+        c.avgViews = live.avgViews || c.avgViews;
+        c.avgEngagementRate = live.avgEngagementRate || c.avgEngagementRate;
+        c.lastScraped = new Date().toISOString();
+        c.lastDailySync = new Date().toISOString();
+
+        // Update 30-day follower history
+        c.followerHistory = c.followerHistory || [];
+        const existingTodayIdx = c.followerHistory.findIndex(h => h.date === todayStr);
+        if (existingTodayIdx !== -1) {
+          c.followerHistory[existingTodayIdx].followers = currentFollowers;
+          c.followerHistory[existingTodayIdx].change = followerDiff;
+          c.followerHistory[existingTodayIdx].timestamp = Date.now();
+        } else {
+          c.followerHistory.push({
+            date: todayStr,
+            timestamp: Date.now(),
+            followers: currentFollowers,
+            change: followerDiff
+          });
+        }
+        if (c.followerHistory.length > 30) {
+          c.followerHistory = c.followerHistory.slice(-30);
+        }
+
+        competitors[i] = c;
+        if (scraped.reels && scraped.reels.length > 0) {
+          reelsCache.set(c.username, scraped.reels);
+        }
+        updatedCount++;
+      }
+    } catch (e) {
+      console.warn(`[DailySync] Error updating @${c.username}:`, e.message);
+    }
+  }
+
+  writeJson(COMPETITORS_FILE, competitors);
+  console.log(`[DailySync] Completed daily sync for ${updatedCount}/${competitors.length} competitors.`);
+  return { success: true, count: updatedCount, total: competitors.length, syncedAt: new Date().toISOString() };
+}
+
+// Background scheduler: runs every 24 hours (86,400,000 ms)
+const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  runDailyFollowerSync();
+}, TWENTY_FOUR_HOURS_MS);
 
 // Initial sync on startup
 syncAllCompetitorsReels();
@@ -302,9 +407,25 @@ app.post('/api/competitors/refresh/:username', async (req, res) => {
       competitors[idx] = { ...competitors[idx], ...scraped.creator, lastScraped: new Date().toISOString() };
       writeJson(COMPETITORS_FILE, competitors);
     }
-    return res.json({ success: true, message: `Refreshed @${username}.` });
+    return res.json({ success: true, message: `Refreshed @${username}.`, competitor: competitors[idx] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Daily Follower Sync endpoint (manual or cron-triggered)
+app.post('/api/competitors/daily-sync', async (req, res) => {
+  try {
+    const result = await runDailyFollowerSync();
+    const competitors = readJson(COMPETITORS_FILE, []);
+    res.json({
+      success: true,
+      message: `Daily sync finished: updated ${result.count} of ${result.total} creators.`,
+      competitors,
+      syncedAt: result.syncedAt
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: `Daily sync failed: ${err.message}` });
   }
 });
 

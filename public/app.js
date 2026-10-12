@@ -63,6 +63,7 @@ const DOM = {
   inputCompetitorHandle: document.getElementById('inputCompetitorHandle'),
   btnOpenAddModal: document.getElementById('btnOpenAddModal'),
   btnShowAddCompFromTab: document.getElementById('btnShowAddCompFromTab'),
+  btnDailySyncAll: document.getElementById('btnDailySyncAll'),
   btnCloseAddModal: document.getElementById('btnCloseAddModal'),
   btnCancelAddModal: document.getElementById('btnCancelAddModal'),
   btnSubmitAddModal: document.getElementById('btnSubmitAddModal'),
@@ -271,6 +272,27 @@ function setupEventListeners() {
       showToast('Error refreshing feeds: ' + e.message, 'error');
     }
   });
+
+  // Daily Follower Sync button listener
+  if (DOM.btnDailySyncAll) {
+    DOM.btnDailySyncAll.addEventListener('click', async () => {
+      showToast('Syncing daily follower changes for all competitors...', 'info');
+      try {
+        const res = await fetch('/api/competitors/daily-sync', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message, 'success');
+          await fetchCompetitors();
+          await fetchReels();
+          await fetchFastBoom();
+        } else {
+          showToast(data.message || 'Daily sync failed', 'error');
+        }
+      } catch (err) {
+        showToast('Error syncing daily stats: ' + err.message, 'error');
+      }
+    });
+  }
 
   // Advanced add fields toggle
   if (DOM.btnToggleAdvancedAdd) {
@@ -690,6 +712,15 @@ function createFastBoomCardHtml(r) {
   `;
 }
 
+function renderFollowerDelta(change) {
+  if (typeof change === 'number' && change > 0) {
+    return `<span class="stat-growth-tag growth" title="Followers increased today">▲ +${formatCompactNumber(change)}</span>`;
+  } else if (typeof change === 'number' && change < 0) {
+    return `<span class="stat-growth-tag drop" title="Followers decreased today">▼ -${formatCompactNumber(Math.abs(change))}</span>`;
+  }
+  return `<span class="stat-growth-tag stable" title="Live follower tracking active">● Live Synced</span>`;
+}
+
 // 3. Render Competitors Grid
 function renderCompetitorsGrid(competitors) {
   if (!competitors || competitors.length === 0) {
@@ -703,34 +734,47 @@ function renderCompetitorsGrid(competitors) {
     return;
   }
 
-  DOM.competitorsGrid.innerHTML = competitors.map(c => `
+  DOM.competitorsGrid.innerHTML = competitors.map(c => {
+    const avatarUrl = c.avatar || `/avatars/${c.username}.jpg`;
+    const fallbackUrl = c.remoteAvatar || avatarUrl;
+    return `
     <div class="competitor-card">
       <div class="comp-card-top">
-        <img src="${c.avatar}" alt="${c.name}" class="comp-avatar-lg" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(c.username)}&background=8b5cf6&color=ffffff'">
+        <img src="${avatarUrl}" alt="${escapeHtml(c.name || c.username)}" class="comp-avatar-lg" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null; this.src='/api/proxy-image?url=' + encodeURIComponent('${fallbackUrl}')">
         <div class="comp-info">
           <span class="comp-name">${escapeHtml(c.name || c.username)}</span>
           <span class="comp-handle">@${escapeHtml(c.username)}</span>
           <span class="comp-niche-badge">${escapeHtml(c.niche || 'Tech & AI')}</span>
-          <span class="comp-source-tag">${escapeHtml(c.dataSource || 'Instagram Feeds')}</span>
+          <span class="comp-source-tag">${escapeHtml(c.dataSource || 'Live Instagram Feeds')}</span>
         </div>
       </div>
 
-      <p class="comp-bio">${escapeHtml(c.bio || 'Tech and AI content creator.')}</p>
+      <p class="comp-bio">${escapeHtml(c.bio || 'Verified Tech and AI Instagram creator.')}</p>
 
+      <!-- Follower Metrics with Daily Increase/Decrease Indicator -->
       <div class="comp-stats-row">
-        <div>
+        <div class="comp-stat-cell">
           <span class="comp-stat-num">${formatCompactNumber(c.followers)}</span>
           <span class="comp-stat-lbl">Followers</span>
+          ${renderFollowerDelta(c.followerChange)}
         </div>
-        <div>
+        <div class="comp-stat-cell">
           <span class="comp-stat-num">${formatCompactNumber(c.avgViews)}</span>
           <span class="comp-stat-lbl">Avg Views</span>
         </div>
-        <div>
+        <div class="comp-stat-cell">
           <span class="comp-stat-num">${c.avgEngagementRate}%</span>
           <span class="comp-stat-lbl">Eng. Rate</span>
         </div>
       </div>
+
+      <!-- Direct Instagram Profile Redirect Button -->
+      <a href="https://www.instagram.com/${escapeHtml(c.username)}/" target="_blank" rel="noopener noreferrer" class="btn btn-instagram-direct" title="Open Instagram Profile of @${escapeHtml(c.username)}">
+        <svg class="ig-btn-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        </svg>
+        <span>View Instagram Profile ↗</span>
+      </a>
 
       <div class="comp-actions">
         <button class="btn btn-secondary btn-sm btn-comp-edit" data-user="${c.username}">
@@ -744,7 +788,8 @@ function renderCompetitorsGrid(competitors) {
         </button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 
   // Attach button listeners
   DOM.competitorsGrid.querySelectorAll('.btn-comp-edit').forEach(btn => {

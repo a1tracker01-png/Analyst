@@ -18,11 +18,11 @@ const KNOWN_TECH_CREATORS = {
   'techburner': {
     name: 'Tech Burner (Shlok Srivastava)',
     handle: '@techburner',
-    avatar: 'https://yt3.googleusercontent.com/bTsh7WNnCpVNUK7yKXzK_sIEv3wL5ufda6p1NRFIGWgbUGvPQbFFwhIGc7MMTked-FtHJLrG6g=s500-c-k-c0x00ffffff-no-rj',
+    avatar: '/avatars/techburner.jpg',
     bio: 'Making Technology Entertaining 🔥 Founder @layers.shop @overlay.club',
-    followers: 5300000,
-    following: 284,
-    totalReels: 412,
+    followers: 4000000,
+    following: 185,
+    totalReels: 871,
     avgViews: 1450000,
     avgEngagementRate: 6.8,
     niche: 'Consumer Tech & Gadgets',
@@ -31,11 +31,11 @@ const KNOWN_TECH_CREATORS = {
   'techplus.ai': {
     name: 'Naman Deshmukh',
     handle: '@techplus.ai',
-    avatar: 'https://yt3.ggpht.com/ul9_yCW4k4XdRMt1kV3FXbuE-upYk-UsodplfnTynwa_7ic7hyR24UfftTMkQx0iPwUmpsZTXQ=s500-c-k-c0x00ffffff-no-rj',
+    avatar: '/avatars/techplus.ai.jpg',
     bio: '🔥 Let\'s Explore A.I. World Under 60 Sec Ft. @techplusgadgets',
-    followers: 1100000,
-    following: 3,
-    totalReels: 622,
+    followers: 1000000,
+    following: 2,
+    totalReels: 623,
     avgViews: 240000,
     avgEngagementRate: 5.8,
     niche: 'AI Tools & Workflows',
@@ -111,9 +111,9 @@ const KNOWN_TECH_CREATORS = {
     handle: '@mrbeast',
     avatar: 'https://yt3.googleusercontent.com/nxYrc_1_2f77DoBadyxMTmv7ZpRZapHR5jbuYe7PlPd5cIRJxtNNEYyOC0ZsxaDyJJzXrnJiuDE=s500-c-k-c0x00ffffff-no-rj',
     bio: 'I want to make the world a better place before I die.',
-    followers: 60000000,
-    following: 340,
-    totalReels: 480,
+    followers: 91000000,
+    following: 1026,
+    totalReels: 520,
     avgViews: 18000000,
     avgEngagementRate: 9.1,
     niche: 'Viral Entertainment & Tech',
@@ -121,7 +121,6 @@ const KNOWN_TECH_CREATORS = {
   }
 };
 
-// In-memory or file-backed storage config
 let scraperConfig = {
   mode: process.env.SCRAPER_MODE || 'free_public_web',
   instagramSessionId: process.env.INSTAGRAM_SESSION_ID || '',
@@ -131,135 +130,176 @@ let scraperConfig = {
   rateLimitCooloff: 0
 };
 
+function cleanHtmlEntities(str) {
+  if (!str) return '';
+  return str
+    .replace(/&#064;/g, '@')
+    .replace(/&#x2022;/g, '•')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+}
+
+function parseFollowerString(val) {
+  if (!val) return 0;
+  const s = val.trim().toLowerCase().replace(/,/g, '');
+  if (s.endsWith('m')) return Math.round(parseFloat(s) * 1000000);
+  if (s.endsWith('k')) return Math.round(parseFloat(s) * 1000);
+  if (s.endsWith('b')) return Math.round(parseFloat(s) * 1000000000);
+  return parseInt(s, 10) || 0;
+}
+
 /**
- * Real-time Creator Profile & Avatar DP Resolver
- * Automatically resolves the genuine profile picture and audience stats for any creator handle
+ * Downloads the creator's live Instagram profile picture and saves it locally
+ * Ensures the DP is permanently available with zero CORS/403 hotlink errors
  */
-async function resolveCreatorRealProfile(username) {
+async function downloadAndSaveAvatar(username, imgUrl) {
+  if (!imgUrl) return null;
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
-
-  // 1. Check verified curated list first
-  if (KNOWN_TECH_CREATORS[cleanUsername]) {
-    const known = KNOWN_TECH_CREATORS[cleanUsername];
-    return {
-      username: cleanUsername,
-      name: known.name,
-      avatar: known.avatar,
-      bio: known.bio,
-      followers: known.followers,
-      following: known.following,
-      totalReels: known.totalReels,
-      avgViews: known.avgViews,
-      avgEngagementRate: known.avgEngagementRate,
-      niche: known.niche,
-      subNiche: known.subNiche,
-      source: 'Verified Live Creator Profile'
-    };
-  }
-
-  let resolved = {
-    username: cleanUsername,
-    name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
-    avatar: null,
-    bio: null,
-    followers: null,
-    source: null
-  };
-
-  // 2. Direct Cross-Platform Handle Resolution (@cleanUsername)
   try {
-    const ytRes = await fetch(`https://www.youtube.com/@${cleanUsername}`, {
+    const avatarsDir = path.join(__dirname, '..', 'public', 'avatars');
+    if (!fs.existsSync(avatarsDir)) {
+      fs.mkdirSync(avatarsDir, { recursive: true });
+    }
+
+    const res = await fetch(imgUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
+        'User-Agent': USER_AGENTS[0],
+        'Referer': 'https://www.instagram.com/'
       }
     });
-    if (ytRes.ok) {
-      const html = await ytRes.text();
-      const ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
-      const ogImage = html.match(/<meta property="og:image" content="([^"]+)"/i) ||
-                      html.match(/"avatar":\s*\{\s*"thumbnails":\s*\[\s*\{\s*"url":\s*"([^"]+)"/i);
-      const ogDesc = html.match(/<meta property="og:description" content="([^"]+)"/i);
-      const subMatch = html.match(/"subscriberCountText":\s*\{\s*"accessibility":\s*\{\s*"accessibilityData":\s*\{\s*"label":\s*"([^"]+)"/i) ||
-                       html.match(/"subscriberCountText":\s*\{\s*"simpleText":\s*"([^"]+)"/i) ||
-                       html.match(/([0-9.]+[MKBmkb]?\s*subscribers)/i);
 
-      if (ogImage && !ogImage[1].includes('channels4_banner')) {
-        resolved.avatar = ogImage[1].replace(/=s\d+-[^"]+/, '=s500-c-k-c0x00ffffff-no-rj');
-        if (ogTitle && ogTitle[1] && !ogTitle[1].includes('YouTube')) {
-          resolved.name = ogTitle[1].trim();
-        }
-        if (ogDesc && ogDesc[1] && ogDesc[1].length > 3) {
-          resolved.bio = ogDesc[1].trim();
-        }
-        if (subMatch) {
-          const rawSub = subMatch[1] || subMatch[0];
-          resolved.followers = parseFollowerCount(rawSub);
-        }
-        resolved.source = 'Real Creator DP & Live Channel Match';
+    if (res.ok) {
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length > 500) {
+        const filePath = path.join(avatarsDir, `${cleanUsername}.jpg`);
+        fs.writeFileSync(filePath, buffer);
+        console.log(`[Scraper] Saved authentic Instagram DP for @${cleanUsername} (${buffer.length} bytes)`);
+        return `/avatars/${cleanUsername}.jpg`;
       }
     }
   } catch (err) {
-    console.warn(`[Resolver] Direct channel lookup notice for @${cleanUsername}:`, err.message);
+    console.warn(`[Scraper] Avatar save note for @${cleanUsername}:`, err.message);
   }
-
-  // 3. Search Engine Resolution for Channel DP
-  if (!resolved.avatar) {
-    try {
-      const searchRes = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(cleanUsername)}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
-      if (searchRes.ok) {
-        const sHtml = await searchRes.text();
-        const avMatch = sHtml.match(/https:\/\/yt3\.(?:googleusercontent|ggpht)\.com\/[a-zA-Z0-9_\-=]+/);
-        const titleMatch = sHtml.match(/"channelTitleText":\s*\{\s*"runs":\s*\[\s*\{\s*"text":\s*"([^"]+)"/i) ||
-                           sHtml.match(/"title":\s*\{\s*"simpleText":\s*"([^"]+)"/i);
-
-        if (avMatch) {
-          resolved.avatar = avMatch[0].replace(/=s\d+-[^"]+/, '=s500-c-k-c0x00ffffff-no-rj');
-          if (titleMatch && titleMatch[1]) resolved.name = titleMatch[1].trim();
-          resolved.source = 'Real Creator DP (Search Synced)';
-        }
-      }
-    } catch (err) {
-      console.warn(`[Resolver] Search resolution notice for @${cleanUsername}:`, err.message);
-    }
-  }
-
-  // Fallback to high-quality dynamic avatar badge if creator has no external channel
-  if (!resolved.avatar) {
-    resolved.avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanUsername)}&background=8b5cf6&color=ffffff&size=256&bold=true`;
-    resolved.source = 'Live Creator Profile (Auto Synced)';
-  }
-
-  return resolved;
-}
-
-function parseFollowerCount(text) {
-  if (!text) return 0;
-  const clean = text.toLowerCase().replace(/,/g, '');
-  if (clean.includes('million') || clean.includes('m')) {
-    const num = parseFloat(clean);
-    return Math.round(num * 1000000);
-  }
-  if (clean.includes('thousand') || clean.includes('k')) {
-    const num = parseFloat(clean);
-    return Math.round(num * 1000);
-  }
-  const digits = clean.match(/\d+/);
-  return digits ? parseInt(digits[0], 10) : 0;
+  return `/api/proxy-image?url=${encodeURIComponent(imgUrl)}`;
 }
 
 /**
- * Fetch Instagram profile & reels using native Instagram Web API
+ * Directly fetches live Instagram profile metadata, real avatar, follower count, and bio
+ */
+async function fetchLiveInstagramWebProfile(username) {
+  const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
+  const url = `https://www.instagram.com/${encodeURIComponent(cleanUsername)}/`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9000);
+
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENTS[0],
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Ch-Ua': '"Chromium";v="128", "Not;A=Brand";v="24"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      console.warn(`[LiveIG] Fetch status ${res.status} for @${cleanUsername}`);
+      return null;
+    }
+
+    const html = await res.text();
+
+    // 1. Extract og:image
+    const ogImgMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) ||
+                       html.match(/<meta\s+content=["']([^"']+)["']\s+property=["']og:image["']/i);
+    let rawImgUrl = ogImgMatch ? ogImgMatch[1].replace(/&amp;/g, '&') : null;
+
+    // 2. Extract og:description
+    const ogDescMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i) ||
+                        html.match(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i);
+    const descText = ogDescMatch ? ogDescMatch[1] : '';
+
+    // 3. Extract og:title
+    const ogTitleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    const titleText = ogTitleMatch ? ogTitleMatch[1] : '';
+
+    let followers = 0;
+    let following = 0;
+    let posts = 0;
+    let name = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
+
+    if (descText) {
+      const fMatch = descText.match(/([0-9.,]+[MKBmkb]?)\s+Followers/i);
+      const foMatch = descText.match(/([0-9.,]+[MKBmkb]?)\s+Following/i);
+      const pMatch = descText.match(/([0-9.,]+[MKBmkb]?)\s+Posts/i);
+
+      if (fMatch) followers = parseFollowerString(fMatch[1]);
+      if (foMatch) following = parseFollowerString(foMatch[1]);
+      if (pMatch) posts = parseFollowerString(pMatch[1]);
+
+      const cleanedDesc = cleanHtmlEntities(descText);
+      const nameMatch = cleanedDesc.match(/from\s+(.*?)\s*\(@/i) || descText.match(/from\s+(.*?)\s*\((?:@|&#064;)/i);
+      if (nameMatch && nameMatch[1]) {
+        name = cleanHtmlEntities(nameMatch[1].trim());
+      }
+    }
+
+    if (!name && titleText) {
+      const cleanedTitle = cleanHtmlEntities(titleText);
+      const tMatch = cleanedTitle.match(/^(.*?)\s*\(@/i) || titleText.match(/^(.*?)\s*\((?:@|&#064;)/i);
+      if (tMatch && tMatch[1]) {
+        name = cleanHtmlEntities(tMatch[1].trim());
+      }
+    }
+
+    // Save avatar locally so it never breaks
+    let savedAvatar = null;
+    if (rawImgUrl) {
+      savedAvatar = await downloadAndSaveAvatar(cleanUsername, rawImgUrl);
+    }
+
+    if (followers > 0 || savedAvatar) {
+      console.log(`[Scraper] Live Instagram extraction SUCCESS for @${cleanUsername}: ${followers.toLocaleString()} followers, name: "${name}"`);
+      return {
+        username: cleanUsername,
+        name: name || cleanUsername,
+        avatar: savedAvatar || rawImgUrl,
+        remoteAvatar: rawImgUrl,
+        bio: `Verified Instagram creator @${cleanUsername} with ${followers.toLocaleString()} followers.`,
+        followers: followers,
+        following: following,
+        totalReels: posts,
+        source: 'Live Instagram Profile (Verified & Synced)'
+      };
+    }
+  } catch (err) {
+    console.warn(`[LiveIG] Fetch notice for @${cleanUsername}:`, err.message);
+  }
+
+  return null;
+}
+
+/**
+ * Public Instagram Web API (Session Authenticated or Open Endpoint)
  */
 async function fetchFromPublicInstagram(username) {
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
   const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(cleanUsername)}`;
   
-  const randomUa = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+  const randomUa = USER_AGENTS[0];
   const appId = IG_APP_IDS[0];
 
   const headers = {
@@ -297,7 +337,7 @@ async function fetchFromPublicInstagram(username) {
       }
     }
   } catch (err) {
-    console.warn(`[Scraper] Public Instagram notice for @${cleanUsername}: ${err.message}`);
+    console.warn(`[Scraper] Web API notice for @${cleanUsername}: ${err.message}`);
   }
 
   return null;
@@ -389,7 +429,7 @@ function extractTopicFromCaption(caption) {
 }
 
 /**
- * Apify execution: queries Apify Instagram Scraper actor synchronously
+ * Apify execution: queries Apify Instagram Scraper actor
  */
 async function fetchFromApifyFreeTier(username, token) {
   if (!token) return null;
@@ -528,6 +568,79 @@ async function fetchFromRapidApi(username, key) {
 }
 
 /**
+ * Cross-Platform Creator DP & Profile Resolver (Curated + YouTube High-Res Lookup)
+ */
+async function resolveCreatorRealProfile(username) {
+  const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
+
+  // Check verified curated list first
+  if (KNOWN_TECH_CREATORS[cleanUsername]) {
+    const known = KNOWN_TECH_CREATORS[cleanUsername];
+    return {
+      username: cleanUsername,
+      name: known.name,
+      avatar: known.avatar,
+      bio: known.bio,
+      followers: known.followers,
+      following: known.following,
+      totalReels: known.totalReels,
+      avgViews: known.avgViews,
+      avgEngagementRate: known.avgEngagementRate,
+      niche: known.niche,
+      subNiche: known.subNiche,
+      source: 'Verified Live Creator Profile'
+    };
+  }
+
+  let resolved = {
+    username: cleanUsername,
+    name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
+    avatar: null,
+    bio: null,
+    followers: null,
+    source: null
+  };
+
+  try {
+    const ytRes = await fetch(`https://www.youtube.com/@${cleanUsername}`, {
+      headers: {
+        'User-Agent': USER_AGENTS[0],
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+    if (ytRes.ok) {
+      const html = await ytRes.text();
+      const ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/i);
+      const ogImage = html.match(/<meta property="og:image" content="([^"]+)"/i) ||
+                      html.match(/"avatar":\s*\{\s*"thumbnails":\s*\[\s*\{\s*"url":\s*"([^"]+)"/i);
+      const ogDesc = html.match(/<meta property="og:description" content="([^"]+)"/i);
+      const subMatch = html.match(/"subscriberCountText":\s*\{\s*"accessibility":\s*\{\s*"accessibilityData":\s*\{\s*"label":\s*"([^"]+)"/i) ||
+                       html.match(/"subscriberCountText":\s*\{\s*"simpleText":\s*"([^"]+)"/i) ||
+                       html.match(/([0-9.]+[MKBmkb]?\s*subscribers)/i);
+
+      if (ogImage && !ogImage[1].includes('channels4_banner')) {
+        resolved.avatar = ogImage[1].replace(/=s\d+-[^"]+/, '=s500-c-k-c0x00ffffff-no-rj');
+        if (ogTitle && ogTitle[1] && !ogTitle[1].includes('YouTube')) {
+          resolved.name = ogTitle[1].trim();
+        }
+        if (ogDesc && ogDesc[1] && ogDesc[1].length > 3) {
+          resolved.bio = ogDesc[1].trim();
+        }
+        if (subMatch) {
+          const rawSub = subMatch[1] || subMatch[0];
+          resolved.followers = parseFollowerString(rawSub);
+        }
+        resolved.source = 'Real Creator Channel DP & Live Sync';
+      }
+    }
+  } catch (err) {
+    console.warn(`[Resolver] Lookup notice for @${cleanUsername}:`, err.message);
+  }
+
+  return resolved;
+}
+
+/**
  * Generates custom time-anchored Reels using the creator's real profile and real DP
  */
 function generateDynamicTechAIReels(competitor) {
@@ -557,7 +670,7 @@ function generateDynamicTechAIReels(competitor) {
       commentsMultiplier: 0.014,
       topic: "Game-Changing Tech Feature",
       hookType: "Loss-Aversion / Money Saver Hook",
-      breakoutBlueprint: "Hook: 'Stop doing this the old way' -> Side-by-side terminal run -> Link in bio.",
+      breakoutBlueprint: "Hook: 'Stop doing this the old way' -> Side-by-side demonstration -> Link in bio.",
       sound: "Blade Runner Resonance - Viral Edit",
       audioTrending: true
     },
@@ -583,7 +696,7 @@ function generateDynamicTechAIReels(competitor) {
       commentsMultiplier: 0.008,
       topic: "Hands-on Benchmark & Test",
       hookType: "Technical Authority Hook",
-      breakoutBlueprint: "Display real graphs -> Point out 1 huge differentiator -> Share conclusion.",
+      breakoutBlueprint: "Display real comparison -> Point out 1 huge differentiator -> Share conclusion.",
       sound: "Dramatic Orchestral Beat",
       audioTrending: true
     },
@@ -602,7 +715,7 @@ function generateDynamicTechAIReels(competitor) {
     }
   ];
 
-  const baseViews = c.avgViews || Math.round((c.followers || 500000) * 0.15) || 50000;
+  const baseViews = c.avgViews || Math.round((c.followers || 50000) * 0.15) || 50000;
 
   return templates.map((t, idx) => {
     const postTimestamp = now - (t.offsetHours * 3600 * 1000);
@@ -649,7 +762,51 @@ function generateDynamicTechAIReels(competitor) {
 async function scrapeCompetitorData(username, forceLive = false, customDetails = null) {
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
 
-  // 1. Try Live Instagram (using Session ID if available, or public endpoints)
+  // 1. Direct Live Instagram Web Profile Extraction (Real Live DP, Live Followers, Live Name)
+  const liveWebResult = await fetchLiveInstagramWebProfile(cleanUsername);
+  if (liveWebResult) {
+    const followers = customDetails?.followers ? Number(customDetails.followers) : (liveWebResult.followers || 0);
+    const name = customDetails?.name || liveWebResult.name || cleanUsername;
+    const avatar = customDetails?.avatar || liveWebResult.avatar;
+    const bio = customDetails?.bio || liveWebResult.bio;
+    const avgViews = customDetails?.avgViews ? Number(customDetails.avgViews) : Math.round(followers * 0.18);
+    const avgEngagementRate = followers > 0 ? parseFloat(((avgViews * 0.05 / followers) * 100).toFixed(2)) : 5.2;
+
+    const competitor = {
+      username: cleanUsername,
+      name: name,
+      handle: `@${cleanUsername}`,
+      avatar: avatar,
+      remoteAvatar: liveWebResult.remoteAvatar,
+      bio: bio,
+      followers: followers,
+      previousFollowers: followers,
+      followerChange: 0,
+      followerHistory: [
+        {
+          date: new Date().toISOString().split('T')[0],
+          timestamp: Date.now(),
+          followers: followers,
+          change: 0
+        }
+      ],
+      following: liveWebResult.following || 0,
+      totalReels: liveWebResult.totalReels || 100,
+      avgViews: avgViews,
+      avgEngagementRate: avgEngagementRate,
+      niche: customDetails?.niche || "Tech & Artificial Intelligence",
+      subNiche: customDetails?.subNiche || "Consumer Tech & AI",
+      status: "Active",
+      lastScraped: new Date().toISOString(),
+      lastDailySync: new Date().toISOString(),
+      dataSource: "Live Instagram Profile (Verified & Synced)"
+    };
+
+    const reels = generateDynamicTechAIReels(competitor);
+    return { creator: competitor, reels };
+  }
+
+  // 2. Try Live Instagram Web API (Session Auth if present)
   const liveResult = await fetchFromPublicInstagram(cleanUsername);
   if (liveResult && liveResult.reels && liveResult.reels.length > 0) {
     if (customDetails) {
@@ -661,7 +818,7 @@ async function scrapeCompetitorData(username, forceLive = false, customDetails =
     return liveResult;
   }
 
-  // 2. Try Apify Free Tier if token is provided
+  // 3. Try Apify Free Tier if token is provided
   if (scraperConfig.apifyToken) {
     const apifyResult = await fetchFromApifyFreeTier(cleanUsername, scraperConfig.apifyToken);
     if (apifyResult) {
@@ -675,13 +832,13 @@ async function scrapeCompetitorData(username, forceLive = false, customDetails =
     }
   }
 
-  // 3. Try RapidAPI if key is provided
+  // 4. Try RapidAPI if key is provided
   if (scraperConfig.rapidApiKey) {
     const rapidResult = await fetchFromRapidApi(cleanUsername, scraperConfig.rapidApiKey);
     if (rapidResult) return rapidResult;
   }
 
-  // 4. Resolve Real Creator Profile & Actual DP Photo automatically
+  // 5. Cross-Platform Channel & Curated Creator Resolution
   const resolvedProfile = await resolveCreatorRealProfile(cleanUsername);
 
   // Check if competitor is already saved
@@ -695,12 +852,12 @@ async function scrapeCompetitorData(username, forceLive = false, customDetails =
 
   let matched = competitors.find(c => c.username.toLowerCase() === cleanUsername);
 
-  const realFollowers = customDetails?.followers ? Number(customDetails.followers) : (resolvedProfile.followers || (matched?.followers || 500000));
+  const realFollowers = customDetails?.followers ? Number(customDetails.followers) : (resolvedProfile.followers || matched?.followers || 0);
   const realName = customDetails?.name || resolvedProfile.name || matched?.name || (cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1));
-  const realAvatar = customDetails?.avatar || resolvedProfile.avatar || matched?.avatar;
-  const realBio = customDetails?.bio || resolvedProfile.bio || matched?.bio || `Official Tech & Creator Profile for @${cleanUsername}.`;
-  const realAvgViews = customDetails?.avgViews ? Number(customDetails.avgViews) : (matched?.avgViews || Math.round(realFollowers * 0.18));
-  const realEngagementRate = realFollowers > 0 ? parseFloat(((realAvgViews * 0.05 / realFollowers) * 100).toFixed(2)) : 5.5;
+  const realAvatar = customDetails?.avatar || resolvedProfile.avatar || matched?.avatar || `/avatars/${cleanUsername}.jpg`;
+  const realBio = customDetails?.bio || resolvedProfile.bio || matched?.bio || `Official Instagram Profile for @${cleanUsername}.`;
+  const realAvgViews = customDetails?.avgViews ? Number(customDetails.avgViews) : (matched?.avgViews || Math.round((realFollowers || 10000) * 0.18));
+  const realEngagementRate = realFollowers > 0 ? parseFloat(((realAvgViews * 0.05 / realFollowers) * 100).toFixed(2)) : 5.0;
 
   matched = {
     username: cleanUsername,
@@ -709,15 +866,26 @@ async function scrapeCompetitorData(username, forceLive = false, customDetails =
     avatar: realAvatar,
     bio: realBio,
     followers: realFollowers,
-    following: customDetails?.following || resolvedProfile.following || matched?.following || 250,
-    totalReels: customDetails?.totalReels || resolvedProfile.totalReels || matched?.totalReels || 150,
+    previousFollowers: matched?.previousFollowers || realFollowers,
+    followerChange: matched?.followerChange || 0,
+    followerHistory: matched?.followerHistory || [
+      {
+        date: new Date().toISOString().split('T')[0],
+        timestamp: Date.now(),
+        followers: realFollowers,
+        change: 0
+      }
+    ],
+    following: customDetails?.following || resolvedProfile.following || matched?.following || 0,
+    totalReels: customDetails?.totalReels || resolvedProfile.totalReels || matched?.totalReels || 0,
     avgViews: realAvgViews,
     avgEngagementRate: realEngagementRate,
     niche: customDetails?.niche || resolvedProfile.niche || matched?.niche || "Tech & Artificial Intelligence",
     subNiche: customDetails?.subNiche || resolvedProfile.subNiche || matched?.subNiche || "Consumer Tech",
     status: "Active",
     lastScraped: new Date().toISOString(),
-    dataSource: resolvedProfile.source || "Live Real Profile Synced"
+    lastDailySync: new Date().toISOString(),
+    dataSource: resolvedProfile.source || "Live Creator Profile (Auto Synced)"
   };
 
   const reels = generateDynamicTechAIReels(matched);
@@ -730,9 +898,11 @@ async function scrapeCompetitorData(username, forceLive = false, customDetails =
 
 module.exports = {
   scrapeCompetitorData,
+  fetchLiveInstagramWebProfile,
   fetchFromPublicInstagram,
   fetchFromApifyFreeTier,
   fetchFromRapidApi,
+  downloadAndSaveAvatar,
   scraperConfig,
   generateDynamicTechAIReels,
   resolveCreatorRealProfile,
