@@ -90,9 +90,9 @@ app.get('/api/competitors', (req, res) => {
   });
 });
 
-// Add new competitor dynamically
+// Add new competitor dynamically (supports automatic live fetch or real custom details)
 app.post('/api/competitors', async (req, res) => {
-  const { username } = req.body;
+  const { username, name, followers, bio, avatar, niche, avgViews } = req.body;
   if (!username) {
     return res.status(400).json({ success: false, message: 'Username is required' });
   }
@@ -106,8 +106,17 @@ app.post('/api/competitors', async (req, res) => {
   }
 
   try {
-    // Scrape or enrich competitor data
-    const scraped = await scrapeCompetitorData(cleanUsername, true);
+    const customDetails = (name || followers || bio || avgViews) ? {
+      name,
+      followers: followers ? Number(String(followers).replace(/,/g, '')) : undefined,
+      bio,
+      avatar,
+      niche,
+      avgViews: avgViews ? Number(String(avgViews).replace(/,/g, '')) : undefined
+    } : null;
+
+    // Scrape or apply verified competitor data
+    const scraped = await scrapeCompetitorData(cleanUsername, true, customDetails);
     const newCompetitor = scraped.creator;
 
     competitors.push(newCompetitor);
@@ -134,6 +143,112 @@ app.post('/api/competitors', async (req, res) => {
     console.error('Failed to add competitor:', err);
     res.status(500).json({ success: false, message: `Could not fetch competitor data: ${err.message}` });
   }
+});
+
+// Update existing competitor's real profile details & stats
+app.put('/api/competitors/:username', (req, res) => {
+  const username = req.params.username.replace(/^@/, '').trim().toLowerCase();
+  const { name, followers, bio, avatar, niche, avgViews } = req.body;
+
+  let competitors = readJson(COMPETITORS_FILE, []);
+  const idx = competitors.findIndex(c => c.username.toLowerCase() === username);
+
+  if (idx === -1) {
+    return res.status(404).json({ success: false, message: `@${username} not found.` });
+  }
+
+  const comp = competitors[idx];
+  if (name !== undefined) comp.name = name;
+  if (followers !== undefined) comp.followers = Number(String(followers).replace(/,/g, ''));
+  if (bio !== undefined) comp.bio = bio;
+  if (avatar !== undefined) comp.avatar = avatar;
+  if (niche !== undefined) comp.niche = niche;
+  if (avgViews !== undefined) comp.avgViews = Number(String(avgViews).replace(/,/g, ''));
+
+  if (comp.followers > 0 && comp.avgViews > 0) {
+    comp.avgEngagementRate = parseFloat(((comp.avgViews * 0.05 / comp.followers) * 100).toFixed(2));
+  }
+
+  comp.dataSource = "Verified Real Stats (User Updated)";
+  comp.lastScraped = new Date().toISOString();
+
+  competitors[idx] = comp;
+  writeJson(COMPETITORS_FILE, competitors);
+
+  // Update reels cache creator metadata
+  const existingReels = reelsCache.get(username) || [];
+  const updatedReels = existingReels.map(r => ({
+    ...r,
+    creator: {
+      ...r.creator,
+      name: comp.name,
+      followers: comp.followers,
+      avatar: comp.avatar,
+      avgViews: comp.avgViews
+    }
+  }));
+  reelsCache.set(username, updatedReels);
+
+  res.json({
+    success: true,
+    message: `Updated @${username}'s profile details.`,
+    competitor: comp
+  });
+});
+
+// Add a real reel to a competitor
+app.post('/api/competitors/:username/reels', (req, res) => {
+  const username = req.params.username.replace(/^@/, '').trim().toLowerCase();
+  const { permalink, caption, views, likes, comments, topic, thumbnail } = req.body;
+
+  let competitors = readJson(COMPETITORS_FILE, []);
+  const comp = competitors.find(c => c.username.toLowerCase() === username);
+  if (!comp) {
+    return res.status(404).json({ success: false, message: `@${username} not found.` });
+  }
+
+  const existingReels = reelsCache.get(username) || [];
+  const realViews = Number(String(views || 0).replace(/,/g, ''));
+  const realLikes = Number(String(likes || 0).replace(/,/g, ''));
+  const realComments = Number(String(comments || 0).replace(/,/g, ''));
+  const now = Date.now();
+
+  const newReel = {
+    id: `custom_${username}_${Date.now()}`,
+    shortcode: permalink ? (permalink.match(/reel\/([^\/\?]+)/)?.[1] || `reel_${Date.now()}`) : `reel_${Date.now()}`,
+    permalink: permalink || `https://www.instagram.com/${username}/`,
+    thumbnail: thumbnail || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80",
+    caption: caption || "",
+    likes: realLikes,
+    comments: realComments,
+    views: realViews,
+    timestamp: now - 3600000,
+    ageHours: 1.0,
+    duration: 35,
+    isVideo: true,
+    topic: topic || "Live Reel",
+    hookType: "Creator Original",
+    breakoutBlueprint: "Verified custom reel entry.",
+    sound: "Original Audio",
+    audioTrending: false,
+    velocity: realViews,
+    creator: {
+      username: comp.username,
+      name: comp.name,
+      avatar: comp.avatar,
+      followers: comp.followers,
+      avgViews: comp.avgViews
+    }
+  };
+
+  existingReels.unshift(newReel);
+  reelsCache.set(username, existingReels);
+
+  res.status(201).json({
+    success: true,
+    message: `Added reel for @${username}.`,
+    reel: newReel
+  });
 });
 
 // Remove competitor
@@ -408,21 +523,23 @@ app.delete('/api/saved-ideas/:id', (req, res) => {
 app.get('/api/scraper/status', (req, res) => {
   res.json({
     success: true,
-    engine: 'Zero-Cost Instagram Public Scraper',
+    engine: 'Instagram Multi-Engine Sync',
     is100PercentFree: true,
     cost: '$0.00 / Lifetime Free',
     mode: scraperConfig.mode,
     publicEndpointsActive: true,
     cachedCompetitorsCount: reelsCache.size,
     lastSync: lastCacheUpdate ? new Date(lastCacheUpdate).toISOString() : 'Pending',
+    hasInstagramSessionId: Boolean(scraperConfig.instagramSessionId),
     hasApifyToken: Boolean(scraperConfig.apifyToken),
     hasRapidApiKey: Boolean(scraperConfig.rapidApiKey)
   });
 });
 
 app.post('/api/scraper/config', (req, res) => {
-  const { mode, apifyToken, rapidApiKey } = req.body;
+  const { mode, instagramSessionId, apifyToken, rapidApiKey } = req.body;
   if (mode) scraperConfig.mode = mode;
+  if (instagramSessionId !== undefined) scraperConfig.instagramSessionId = instagramSessionId;
   if (apifyToken !== undefined) scraperConfig.apifyToken = apifyToken;
   if (rapidApiKey !== undefined) scraperConfig.rapidApiKey = rapidApiKey;
 
@@ -431,6 +548,7 @@ app.post('/api/scraper/config', (req, res) => {
     message: 'Scraper settings updated successfully.',
     config: {
       mode: scraperConfig.mode,
+      hasInstagramSessionId: Boolean(scraperConfig.instagramSessionId),
       hasApifyToken: Boolean(scraperConfig.apifyToken),
       hasRapidApiKey: Boolean(scraperConfig.rapidApiKey)
     }

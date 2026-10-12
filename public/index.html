@@ -57,8 +57,11 @@
         <button class="btn btn-secondary" id="btnRefreshAll" title="Refresh all competitor feeds">
           <span class="btn-icon">🔄</span> Refresh
         </button>
+        <button class="btn btn-secondary" id="btnOpenAddReelModal" title="Add a real Instagram reel link">
+          <span class="btn-icon">🎬</span> + Add Reel
+        </button>
         <button class="btn btn-primary" id="btnOpenAddModal">
-          <span class="btn-icon">+</span> Add Competitor
+          <span class="btn-icon">+</span> Track Competitor
         </button>
       </div>
     </header>
@@ -366,11 +369,20 @@
             </div>
 
             <div class="config-box">
-              <h4>Optional Free-Tier Tokens</h4>
+              <h4>Scraper Authentication & Tokens</h4>
+
+              <div class="input-form-group">
+                <label for="igSessionIdInput">Instagram Session ID (100% Real Live Feeds & Free):</label>
+                <input type="password" id="igSessionIdInput" placeholder="Paste sessionid cookie from instagram.com..." autocomplete="off">
+                <small style="color: #38bdf8; display: block; margin-top: 0.35rem; line-height: 1.4;">
+                  💡 <strong>How to get it in 15 seconds:</strong> Log into instagram.com &rarr; press <code>F12</code> &rarr; click <code>Application</code> (or <code>Storage</code>) &rarr; <code>Cookies</code> &rarr; copy the value of <code>sessionid</code>. This fetches 100% genuine live follower counts and real reels without any paid API keys!
+                </small>
+              </div>
+
               <div class="input-form-group">
                 <label for="apifyTokenInput">Apify Free Token (Optional):</label>
                 <input type="password" id="apifyTokenInput" placeholder="apify_api_..." autocomplete="off">
-                <small>Get a 100% free plan at apify.com (no credit card required).</small>
+                <small>Get a free account at apify.com ($5 free monthly credits).</small>
               </div>
 
               <div class="input-form-group">
@@ -419,7 +431,7 @@
       </div>
       <div class="modal-body">
         <p class="modal-help-text">
-          Enter any public Instagram handle. The zero-cost scraper will query public endpoints and index their recent reels.
+          Enter any public Instagram handle. If you've saved your Instagram Session ID or Apify token in Settings, it auto-fetches 100% live data. You can also specify exact real stats directly below.
         </p>
         <div class="form-group">
           <label for="inputCompetitorHandle">Instagram Username:</label>
@@ -429,7 +441,40 @@
           </div>
         </div>
 
-        <div class="modal-suggestions">
+        <div class="expandable-section">
+          <button type="button" class="btn-toggle-advanced" id="btnToggleAdvancedAdd">
+            <span>🎯 Enter Real Stats Directly (Optional / Accurate)</span>
+            <span id="advancedChevron">▾</span>
+          </button>
+          <div class="advanced-add-fields" id="advancedAddFields" style="display: none;">
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="inputCompRealName">Real Full Name:</label>
+                <input type="text" id="inputCompRealName" placeholder="e.g. Naman Deshmukh">
+              </div>
+              <div class="form-group flex-1">
+                <label for="inputCompRealFollowers">Real Followers:</label>
+                <input type="text" id="inputCompRealFollowers" placeholder="e.g. 1100000 or 1.1M">
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="inputCompRealBio">Bio / Summary:</label>
+              <input type="text" id="inputCompRealBio" placeholder="e.g. Practical AI workflows in 60s">
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="inputCompAvgViews">Avg Reel Views:</label>
+                <input type="text" id="inputCompAvgViews" placeholder="e.g. 140000">
+              </div>
+              <div class="form-group flex-1">
+                <label for="inputCompNiche">Niche / Category:</label>
+                <input type="text" id="inputCompNiche" placeholder="Tech & AI Tools">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-suggestions" style="margin-top: 1rem;">
           <span class="sugg-label">Popular in Tech & AI:</span>
           <div class="sugg-tags">
             <button class="sugg-tag" data-user="fireship_dev">@fireship_dev</button>
@@ -448,6 +493,97 @@
         <button class="btn btn-primary" id="btnSubmitAddModal">
           <span class="btn-icon">⚡</span> Track Profile
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: EDIT COMPETITOR REAL STATS                            -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="editCompetitorModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">✏️ Edit Competitor Real Stats</h3>
+        <button class="modal-close" id="btnCloseEditModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editCompUsername">
+        <div class="form-group">
+          <label>Instagram Handle:</label>
+          <input type="text" id="editCompHandleDisplay" disabled class="input-disabled">
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="editCompName">Creator Name:</label>
+            <input type="text" id="editCompName" required>
+          </div>
+          <div class="form-group flex-1">
+            <label for="editCompFollowers">Follower Count:</label>
+            <input type="text" id="editCompFollowers" required placeholder="e.g. 1100000">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="editCompBio">Biography / Bio:</label>
+          <textarea id="editCompBio" rows="2" class="custom-textarea"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="editCompAvgViews">Avg Reel Views:</label>
+            <input type="text" id="editCompAvgViews" placeholder="e.g. 120000">
+          </div>
+          <div class="form-group flex-1">
+            <label for="editCompNiche">Niche / Category:</label>
+            <input type="text" id="editCompNiche">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelEditModal">Cancel</button>
+        <button class="btn btn-primary" id="btnSaveEditModal">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- MODAL: ADD REAL REEL                                         -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop" id="addReelModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">🎬 Add Real Reel to Track</h3>
+        <button class="modal-close" id="btnCloseAddReelModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="addReelCreatorSelect">Target Competitor:</label>
+          <select id="addReelCreatorSelect" class="custom-select"></select>
+        </div>
+        <div class="form-group">
+          <label for="addReelPermalink">Instagram Reel URL:</label>
+          <input type="url" id="addReelPermalink" placeholder="https://www.instagram.com/reel/C..." required>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="addReelViews">Real View Count:</label>
+            <input type="text" id="addReelViews" placeholder="e.g. 245000" required>
+          </div>
+          <div class="form-group flex-1">
+            <label for="addReelLikes">Likes Count:</label>
+            <input type="text" id="addReelLikes" placeholder="e.g. 18500">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="addReelTopic">Topic / Headline Hook:</label>
+          <input type="text" id="addReelTopic" placeholder="e.g. 3 AI Tools That Replace a Team">
+        </div>
+        <div class="form-group">
+          <label for="addReelCaption">Caption Text:</label>
+          <textarea id="addReelCaption" rows="2" class="custom-textarea" placeholder="Paste reel caption text..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelAddReelModal">Cancel</button>
+        <button class="btn btn-primary" id="btnSubmitAddReelModal">Add Reel</button>
       </div>
     </div>
   </div>

@@ -68,6 +68,41 @@ const DOM = {
   btnSubmitAddModal: document.getElementById('btnSubmitAddModal'),
   addCompStatusMsg: document.getElementById('addCompStatusMsg'),
 
+  btnToggleAdvancedAdd: document.getElementById('btnToggleAdvancedAdd'),
+  advancedAddFields: document.getElementById('advancedAddFields'),
+  advancedChevron: document.getElementById('advancedChevron'),
+  inputCompRealName: document.getElementById('inputCompRealName'),
+  inputCompRealFollowers: document.getElementById('inputCompRealFollowers'),
+  inputCompRealBio: document.getElementById('inputCompRealBio'),
+  inputCompAvgViews: document.getElementById('inputCompAvgViews'),
+  inputCompNiche: document.getElementById('inputCompNiche'),
+
+  // Edit Competitor Modal
+  editCompetitorModal: document.getElementById('editCompetitorModal'),
+  editCompUsername: document.getElementById('editCompUsername'),
+  editCompHandleDisplay: document.getElementById('editCompHandleDisplay'),
+  editCompName: document.getElementById('editCompName'),
+  editCompFollowers: document.getElementById('editCompFollowers'),
+  editCompBio: document.getElementById('editCompBio'),
+  editCompAvgViews: document.getElementById('editCompAvgViews'),
+  editCompNiche: document.getElementById('editCompNiche'),
+  btnCloseEditModal: document.getElementById('btnCloseEditModal'),
+  btnCancelEditModal: document.getElementById('btnCancelEditModal'),
+  btnSaveEditModal: document.getElementById('btnSaveEditModal'),
+
+  // Add Reel Modal
+  btnOpenAddReelModal: document.getElementById('btnOpenAddReelModal'),
+  addReelModal: document.getElementById('addReelModal'),
+  addReelCreatorSelect: document.getElementById('addReelCreatorSelect'),
+  addReelPermalink: document.getElementById('addReelPermalink'),
+  addReelViews: document.getElementById('addReelViews'),
+  addReelLikes: document.getElementById('addReelLikes'),
+  addReelTopic: document.getElementById('addReelTopic'),
+  addReelCaption: document.getElementById('addReelCaption'),
+  btnCloseAddReelModal: document.getElementById('btnCloseAddReelModal'),
+  btnCancelAddReelModal: document.getElementById('btnCancelAddReelModal'),
+  btnSubmitAddReelModal: document.getElementById('btnSubmitAddReelModal'),
+
   quickAddInput: document.getElementById('quickAddInput'),
   btnQuickAdd: document.getElementById('btnQuickAdd'),
 
@@ -81,6 +116,7 @@ const DOM = {
   btnExportCsv: document.getElementById('btnExportCsv'),
   btnRefreshAll: document.getElementById('btnRefreshAll'),
   btnSaveScraperSettings: document.getElementById('btnSaveScraperSettings'),
+  igSessionIdInput: document.getElementById('igSessionIdInput'),
   apifyTokenInput: document.getElementById('apifyTokenInput'),
   rapidApiKeyInput: document.getElementById('rapidApiKeyInput'),
   toastContainer: document.getElementById('toastContainer'),
@@ -236,20 +272,46 @@ function setupEventListeners() {
     }
   });
 
+  // Advanced add fields toggle
+  if (DOM.btnToggleAdvancedAdd) {
+    DOM.btnToggleAdvancedAdd.addEventListener('click', () => {
+      const isHidden = DOM.advancedAddFields.style.display === 'none';
+      DOM.advancedAddFields.style.display = isHidden ? 'block' : 'none';
+      if (DOM.advancedChevron) DOM.advancedChevron.textContent = isHidden ? '▴' : '▾';
+    });
+  }
+
+  // Edit Competitor modal listeners
+  if (DOM.btnCloseEditModal) DOM.btnCloseEditModal.addEventListener('click', closeEditModal);
+  if (DOM.btnCancelEditModal) DOM.btnCancelEditModal.addEventListener('click', closeEditModal);
+  if (DOM.btnSaveEditModal) DOM.btnSaveEditModal.addEventListener('click', submitEditCompetitorModal);
+
+  // Add Reel modal listeners
+  if (DOM.btnOpenAddReelModal) DOM.btnOpenAddReelModal.addEventListener('click', openAddReelModal);
+  if (DOM.btnCloseAddReelModal) DOM.btnCloseAddReelModal.addEventListener('click', closeAddReelModal);
+  if (DOM.btnCancelAddReelModal) DOM.btnCancelAddReelModal.addEventListener('click', closeAddReelModal);
+  if (DOM.btnSubmitAddReelModal) DOM.btnSubmitAddReelModal.addEventListener('click', submitAddReelModal);
+
   // Scraper Settings save
   if (DOM.btnSaveScraperSettings) {
     DOM.btnSaveScraperSettings.addEventListener('click', async () => {
-      const apifyToken = DOM.apifyTokenInput.value.trim();
-      const rapidApiKey = DOM.rapidApiKeyInput.value.trim();
+      const instagramSessionId = DOM.igSessionIdInput ? DOM.igSessionIdInput.value.trim() : '';
+      const apifyToken = DOM.apifyTokenInput ? DOM.apifyTokenInput.value.trim() : '';
+      const rapidApiKey = DOM.rapidApiKeyInput ? DOM.rapidApiKeyInput.value.trim() : '';
       try {
         const res = await fetch('/api/scraper/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apifyToken, rapidApiKey })
+          body: JSON.stringify({ instagramSessionId, apifyToken, rapidApiKey })
         });
         const data = await res.json();
         if (data.success) {
-          showToast('Scraper configuration saved!', 'success');
+          // Persist locally
+          if (instagramSessionId) localStorage.setItem('vr_ig_session', instagramSessionId);
+          if (apifyToken) localStorage.setItem('vr_apify_token', apifyToken);
+          if (rapidApiKey) localStorage.setItem('vr_rapidapi_key', rapidApiKey);
+
+          showToast('Scraper configuration saved! Live sync ready.', 'success');
         }
       } catch (e) {
         showToast('Failed to save settings: ' + e.message, 'error');
@@ -297,6 +359,7 @@ function updateSortTag() {
 // DATA FETCHING
 // ==========================================
 async function loadAllData() {
+  await loadScraperSettings();
   await fetchCompetitors();
   await fetchReels();
   await fetchFastBoom();
@@ -648,6 +711,7 @@ function renderCompetitorsGrid(competitors) {
           <span class="comp-name">${escapeHtml(c.name || c.username)}</span>
           <span class="comp-handle">@${escapeHtml(c.username)}</span>
           <span class="comp-niche-badge">${escapeHtml(c.niche || 'Tech & AI')}</span>
+          <span class="comp-source-tag">${escapeHtml(c.dataSource || 'Instagram Feeds')}</span>
         </div>
       </div>
 
@@ -669,6 +733,9 @@ function renderCompetitorsGrid(competitors) {
       </div>
 
       <div class="comp-actions">
+        <button class="btn btn-secondary btn-sm btn-comp-edit" data-user="${c.username}">
+          ✏️ Edit Stats
+        </button>
         <button class="btn btn-secondary btn-sm btn-comp-refresh" data-user="${c.username}">
           🔄 Refresh
         </button>
@@ -680,6 +747,10 @@ function renderCompetitorsGrid(competitors) {
   `).join('');
 
   // Attach button listeners
+  DOM.competitorsGrid.querySelectorAll('.btn-comp-edit').forEach(btn => {
+    btn.addEventListener('click', () => openEditCompetitorModal(btn.dataset.user));
+  });
+
   DOM.competitorsGrid.querySelectorAll('.btn-comp-refresh').forEach(btn => {
     btn.addEventListener('click', () => refreshCompetitorHandle(btn.dataset.user));
   });
@@ -1052,6 +1123,13 @@ Speech: "Comment 'WORKFLOW' below and I'll DM you the direct template before it 
 // ==========================================
 function openAddModal() {
   DOM.inputCompetitorHandle.value = '';
+  if (DOM.inputCompRealName) DOM.inputCompRealName.value = '';
+  if (DOM.inputCompRealFollowers) DOM.inputCompRealFollowers.value = '';
+  if (DOM.inputCompRealBio) DOM.inputCompRealBio.value = '';
+  if (DOM.inputCompAvgViews) DOM.inputCompAvgViews.value = '';
+  if (DOM.inputCompNiche) DOM.inputCompNiche.value = '';
+  if (DOM.advancedAddFields) DOM.advancedAddFields.style.display = 'none';
+  if (DOM.advancedChevron) DOM.advancedChevron.textContent = '▾';
   DOM.addCompStatusMsg.style.display = 'none';
   DOM.addCompetitorModal.classList.add('show');
   DOM.inputCompetitorHandle.focus();
@@ -1068,18 +1146,28 @@ async function submitAddModal() {
     return;
   }
 
-  showModalMsg(`Scraping @${handle} via public Instagram engine...`, 'info');
+  const payload = {
+    username: handle,
+    name: DOM.inputCompRealName?.value.trim() || undefined,
+    followers: DOM.inputCompRealFollowers?.value.trim() || undefined,
+    bio: DOM.inputCompRealBio?.value.trim() || undefined,
+    avgViews: DOM.inputCompAvgViews?.value.trim() || undefined,
+    niche: DOM.inputCompNiche?.value.trim() || undefined
+  };
+
+  showModalMsg(`Syncing @${handle}... Checking live feed & credentials...`, 'info');
   DOM.btnSubmitAddModal.disabled = true;
 
   try {
     const res = await fetch('/api/competitors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: handle })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (data.success) {
       showModalMsg(data.message, 'success');
+      showToast(data.message, 'success');
       setTimeout(() => {
         closeAddModal();
         DOM.btnSubmitAddModal.disabled = false;
@@ -1092,6 +1180,161 @@ async function submitAddModal() {
   } catch (err) {
     showModalMsg('Error: ' + err.message, 'error');
     DOM.btnSubmitAddModal.disabled = false;
+  }
+}
+
+// ==========================================
+// EDIT COMPETITOR MODAL
+// ==========================================
+function openEditCompetitorModal(username) {
+  const comp = STATE.competitors.find(c => c.username.toLowerCase() === username.toLowerCase());
+  if (!comp) return;
+
+  DOM.editCompUsername.value = comp.username;
+  DOM.editCompHandleDisplay.value = `@${comp.username}`;
+  DOM.editCompName.value = comp.name || comp.username;
+  DOM.editCompFollowers.value = comp.followers || '';
+  DOM.editCompBio.value = comp.bio || '';
+  DOM.editCompAvgViews.value = comp.avgViews || '';
+  DOM.editCompNiche.value = comp.niche || 'Tech & AI';
+
+  DOM.editCompetitorModal.classList.add('show');
+}
+
+function closeEditModal() {
+  DOM.editCompetitorModal.classList.remove('show');
+}
+
+async function submitEditCompetitorModal() {
+  const username = DOM.editCompUsername.value;
+  if (!username) return;
+
+  const payload = {
+    name: DOM.editCompName.value.trim(),
+    followers: DOM.editCompFollowers.value.trim(),
+    bio: DOM.editCompBio.value.trim(),
+    avgViews: DOM.editCompAvgViews.value.trim(),
+    niche: DOM.editCompNiche.value.trim()
+  };
+
+  try {
+    const res = await fetch(`/api/competitors/${encodeURIComponent(username)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Updated real stats for @${username}!`, 'success');
+      closeEditModal();
+      loadAllData();
+    } else {
+      showToast(data.message || 'Failed to update', 'error');
+    }
+  } catch (err) {
+    showToast('Error updating competitor: ' + err.message, 'error');
+  }
+}
+
+// ==========================================
+// ADD REAL REEL MODAL
+// ==========================================
+function openAddReelModal() {
+  // Populate dropdown with tracked competitors
+  DOM.addReelCreatorSelect.innerHTML = '';
+  if (STATE.competitors.length === 0) {
+    DOM.addReelCreatorSelect.innerHTML = '<option value="">No competitors tracked yet</option>';
+  } else {
+    STATE.competitors.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.username;
+      opt.textContent = `@${c.username} (${c.name || ''})`;
+      DOM.addReelCreatorSelect.appendChild(opt);
+    });
+  }
+
+  DOM.addReelPermalink.value = '';
+  DOM.addReelViews.value = '';
+  DOM.addReelLikes.value = '';
+  DOM.addReelTopic.value = '';
+  DOM.addReelCaption.value = '';
+
+  DOM.addReelModal.classList.add('show');
+}
+
+function closeAddReelModal() {
+  DOM.addReelModal.classList.remove('show');
+}
+
+async function submitAddReelModal() {
+  const username = DOM.addReelCreatorSelect.value;
+  const permalink = DOM.addReelPermalink.value.trim();
+  const views = DOM.addReelViews.value.trim();
+
+  if (!username) {
+    showToast('Please select a competitor', 'error');
+    return;
+  }
+  if (!permalink) {
+    showToast('Please enter an Instagram reel URL', 'error');
+    return;
+  }
+  if (!views) {
+    showToast('Please enter real view count', 'error');
+    return;
+  }
+
+  const payload = {
+    permalink,
+    views,
+    likes: DOM.addReelLikes.value.trim(),
+    topic: DOM.addReelTopic.value.trim(),
+    caption: DOM.addReelCaption.value.trim()
+  };
+
+  try {
+    const res = await fetch(`/api/competitors/${encodeURIComponent(username)}/reels`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Added real reel to @${username}!`, 'success');
+      closeAddReelModal();
+      loadAllData();
+    } else {
+      showToast(data.message || 'Error adding reel', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to add reel: ' + err.message, 'error');
+  }
+}
+
+// Load scraper settings from localStorage / status API
+async function loadScraperSettings() {
+  // Check localStorage first
+  const savedSession = localStorage.getItem('vr_ig_session');
+  const savedApify = localStorage.getItem('vr_apify_token');
+  const savedRapid = localStorage.getItem('vr_rapidapi_key');
+
+  if (savedSession && DOM.igSessionIdInput) DOM.igSessionIdInput.value = savedSession;
+  if (savedApify && DOM.apifyTokenInput) DOM.apifyTokenInput.value = savedApify;
+  if (savedRapid && DOM.rapidApiKeyInput) DOM.rapidApiKeyInput.value = savedRapid;
+
+  // Sync to backend if localStorage has keys but backend was restarted
+  if (savedSession || savedApify || savedRapid) {
+    try {
+      await fetch('/api/scraper/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instagramSessionId: savedSession || undefined,
+          apifyToken: savedApify || undefined,
+          rapidApiKey: savedRapid || undefined
+        })
+      });
+    } catch(e) {}
   }
 }
 

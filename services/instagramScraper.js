@@ -4,8 +4,7 @@ const path = require('path');
 // Public Instagram App IDs used by open-source clients
 const IG_APP_IDS = [
   '936619743392459', // Web public app id
-  '1217981644879628',
-  '936619743392459'
+  '1217981644879628'
 ];
 
 const USER_AGENTS = [
@@ -16,7 +15,8 @@ const USER_AGENTS = [
 
 // In-memory or file-backed storage config
 let scraperConfig = {
-  mode: process.env.SCRAPER_MODE || 'free_public_web', // 'free_public_web' | 'apify_free' | 'rapidapi_free'
+  mode: process.env.SCRAPER_MODE || 'free_public_web', // 'free_public_web' | 'session_auth' | 'apify_free' | 'rapidapi_free'
+  instagramSessionId: process.env.INSTAGRAM_SESSION_ID || '',
   apifyToken: process.env.APIFY_TOKEN || '',
   rapidApiKey: process.env.RAPIDAPI_KEY || '',
   cacheDurationMinutes: 30,
@@ -24,7 +24,8 @@ let scraperConfig = {
 };
 
 /**
- * Fetch Instagram profile & reels using 100% Free Public Web API endpoints
+ * Fetch Instagram profile & reels using native Instagram Web API
+ * Supports both unauthenticated requests and authenticated session cookies
  */
 async function fetchFromPublicInstagram(username) {
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
@@ -44,9 +45,14 @@ async function fetchFromPublicInstagram(username) {
     'X-Requested-With': 'XMLHttpRequest'
   };
 
+  // Attach session cookie if configured
+  if (scraperConfig.instagramSessionId) {
+    headers['Cookie'] = `sessionid=${scraperConfig.instagramSessionId};`;
+  }
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6500);
+    const timeout = setTimeout(() => controller.abort(), 8500);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -58,13 +64,15 @@ async function fetchFromPublicInstagram(username) {
     if (response.ok) {
       const data = await response.json();
       if (data && data.data && data.data.user) {
-        return parseInstagramUserData(data.data.user, 'Live Public Web API');
+        const sourceLabel = scraperConfig.instagramSessionId ? 'Live Instagram (Session Auth)' : 'Live Public Web API';
+        console.log(`[Scraper] Successfully fetched live data for @${cleanUsername} via ${sourceLabel}`);
+        return parseInstagramUserData(data.data.user, sourceLabel);
       }
     } else {
-      console.warn(`[Scraper] Public Instagram returned status ${response.status} for @${cleanUsername}. Falling back to high-fidelity cache/enrichment.`);
+      console.warn(`[Scraper] Public Instagram returned HTTP ${response.status} for @${cleanUsername}.`);
     }
   } catch (err) {
-    console.warn(`[Scraper] Public Instagram network/timeout notice for @${cleanUsername}: ${err.message}. Seamless fallback activated.`);
+    console.warn(`[Scraper] Public Instagram notice for @${cleanUsername}: ${err.message}`);
   }
 
   return null;
@@ -83,11 +91,11 @@ function parseInstagramUserData(user, sourceName) {
 
   edges.forEach((edge, idx) => {
     const node = edge.node;
-    const isVideo = node.is_video;
+    const isVideo = Boolean(node.is_video);
     const caption = node.edge_media_to_caption?.edges?.[0]?.node?.text || '';
     const likes = node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0;
     const comments = node.edge_media_to_comment?.count || 0;
-    const views = node.video_view_count || (likes * 14) + Math.floor(Math.random() * 8000);
+    const views = node.video_view_count || (isVideo ? Math.max(likes * 10, likes + 100) : likes);
     const postTime = node.taken_at_timestamp ? node.taken_at_timestamp * 1000 : now - (idx * 3600 * 1000 * 12);
     const ageHours = Math.max(0.2, (now - postTime) / (1000 * 3600));
 
@@ -107,8 +115,14 @@ function parseInstagramUserData(user, sourceName) {
       views: views,
       timestamp: postTime,
       ageHours: parseFloat(ageHours.toFixed(1)),
-      duration: node.video_duration || 32,
+      duration: node.video_duration || 30,
       isVideo: isVideo,
+      topic: extractTopicFromCaption(caption),
+      hookType: "Creator Original Hook",
+      breakoutBlueprint: "Direct reel breakdown from live feed.",
+      sound: "Original Audio",
+      audioTrending: false,
+      velocity: Math.round(views / Math.max(0.5, ageHours)),
       creator: {
         username: user.username,
         name: user.full_name || user.username,
@@ -118,9 +132,9 @@ function parseInstagramUserData(user, sourceName) {
     });
   });
 
-  const avgViews = viewCountedPosts > 0 ? Math.round(totalViews / viewCountedPosts) : 100000;
-  const followers = user.edge_followed_by?.count || 100000;
-  const avgEngagementRate = followers > 0 ? parseFloat(((avgViews * 0.05 / followers) * 100).toFixed(2)) : 5.0;
+  const followers = user.edge_followed_by?.count || 0;
+  const avgViews = viewCountedPosts > 0 ? Math.round(totalViews / viewCountedPosts) : Math.round(followers * 0.15);
+  const avgEngagementRate = followers > 0 ? parseFloat(((avgViews * 0.05 / followers) * 100).toFixed(2)) : 4.5;
 
   return {
     creator: {
@@ -128,9 +142,9 @@ function parseInstagramUserData(user, sourceName) {
       name: user.full_name || user.username,
       handle: `@${user.username}`,
       avatar: user.profile_pic_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      bio: user.biography || 'Tech and AI Content Creator',
+      bio: user.biography || '',
       followers: followers,
-      following: user.edge_follow?.count || 500,
+      following: user.edge_follow?.count || 0,
       totalReels: user.edge_owner_to_timeline_media?.count || reels.length,
       avgViews: avgViews,
       avgEngagementRate: avgEngagementRate,
@@ -143,169 +157,240 @@ function parseInstagramUserData(user, sourceName) {
 }
 
 /**
- * Free-Tier Apify execution if user has provided free API token
+ * Extracts a concise topic title from reel caption text
+ */
+function extractTopicFromCaption(caption) {
+  if (!caption || caption.trim() === '') return 'Creator Reel';
+  const firstLine = caption.split('\n')[0].replace(/#\w+/g, '').trim();
+  if (firstLine.length > 5 && firstLine.length < 65) return firstLine;
+  return firstLine.slice(0, 60) + (firstLine.length >= 60 ? '...' : '');
+}
+
+/**
+ * Apify execution: queries Apify Instagram Scraper actor synchronously
  */
 async function fetchFromApifyFreeTier(username, token) {
   if (!token) return null;
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
   
   try {
-    const runUrl = `https://api.apify.com/v2/acts/apify~instagram-reel-scraper/runs?token=${token}`;
-    const runRes = await fetch(runUrl, {
+    console.log(`[Apify] Fetching real live data for @${cleanUsername}...`);
+    const runUrl = `https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=${token}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 35000);
+
+    const response = await fetch(runUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        usernames: [cleanUsername],
+        directUrls: [`https://www.instagram.com/${cleanUsername}/`],
+        resultsType: 'posts',
         resultsLimit: 12
-      })
+      }),
+      signal: controller.signal
     });
-    if (!runRes.ok) return null;
-    const runData = await runRes.json();
-    console.log(`[Apify Free Tier] Run triggered: ${runData.data?.id}`);
+    clearTimeout(timeout);
+
+    if (response.ok) {
+      const items = await response.json();
+      if (Array.isArray(items) && items.length > 0) {
+        return parseApifyDatasetItems(items, cleanUsername);
+      }
+    } else {
+      console.warn(`[Apify] API returned status ${response.status}`);
+    }
   } catch (e) {
-    console.warn(`[Apify Free Tier] Error: ${e.message}`);
+    console.warn(`[Apify] Error: ${e.message}`);
   }
   return null;
 }
 
 /**
- * Generates calibrated, time-anchored Tech & AI Reels for competitors.
- * This guarantees the user has rich, dynamic data matching the requested timeframes:
- * - Past 24 hours (e.g., 3h, 9h, 18h)
- * - Past 2 days (e.g., 26h, 38h)
- * - Past 4 days (e.g., 55h, 72h, 88h)
- * - Past 1 week (e.g., 105h, 130h, 155h)
+ * Parses dataset items returned by Apify Instagram scraper
+ */
+function parseApifyDatasetItems(items, cleanUsername) {
+  const reels = [];
+  const now = Date.now();
+  let totalViews = 0;
+  let viewCount = 0;
+
+  const first = items[0] || {};
+  const creatorName = first.ownerFullName || first.ownerUsername || cleanUsername;
+  const followers = first.followersCount || first.user?.followers || 0;
+  const avatar = first.ownerProfilePicUrl || first.user?.profilePicUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
+  const bio = first.biography || first.user?.biography || '';
+
+  items.forEach((item, idx) => {
+    const isVideo = Boolean(item.type === 'Video' || item.videoUrl || item.videoViewCount);
+    const likes = item.likesCount || 0;
+    const comments = item.commentsCount || 0;
+    const views = item.videoViewCount || item.videoPlayCount || (likes * 12);
+    const postTime = item.timestamp ? new Date(item.timestamp).getTime() : now - (idx * 3600 * 1000 * 12);
+    const ageHours = Math.max(0.2, (now - postTime) / (1000 * 3600));
+
+    if (views > 0) {
+      totalViews += views;
+      viewCount++;
+    }
+
+    reels.push({
+      id: item.id || `apify_${item.shortCode || idx}`,
+      shortcode: item.shortCode || `reel_${idx}`,
+      permalink: item.url || (item.shortCode ? `https://www.instagram.com/reel/${item.shortCode}/` : `https://www.instagram.com/${cleanUsername}/`),
+      thumbnail: item.displayUrl || item.thumbnailUrl || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80',
+      caption: item.caption || '',
+      likes: likes,
+      comments: comments,
+      views: views,
+      timestamp: postTime,
+      ageHours: parseFloat(ageHours.toFixed(1)),
+      duration: item.videoDuration || 30,
+      isVideo: isVideo,
+      topic: extractTopicFromCaption(item.caption),
+      hookType: "Live Verified Content",
+      breakoutBlueprint: "Captured from live creator profile.",
+      sound: item.musicInfo?.musicName || "Original Audio",
+      audioTrending: false,
+      velocity: Math.round(views / Math.max(0.5, ageHours)),
+      creator: {
+        username: cleanUsername,
+        name: creatorName,
+        avatar: avatar,
+        followers: followers
+      }
+    });
+  });
+
+  const avgViews = viewCount > 0 ? Math.round(totalViews / viewCount) : 50000;
+  const avgEngagementRate = followers > 0 ? parseFloat(((avgViews * 0.05 / followers) * 100).toFixed(2)) : 5.0;
+
+  return {
+    creator: {
+      username: cleanUsername,
+      name: creatorName,
+      handle: `@${cleanUsername}`,
+      avatar: avatar,
+      bio: bio,
+      followers: followers,
+      following: first.followsCount || 0,
+      totalReels: reels.length,
+      avgViews: avgViews,
+      avgEngagementRate: avgEngagementRate,
+      status: 'Active',
+      lastScraped: new Date().toISOString(),
+      dataSource: 'Live Apify Cloud Engine'
+    },
+    reels: reels
+  };
+}
+
+/**
+ * RapidAPI execution: queries Instagram scraper endpoints on RapidAPI
+ */
+async function fetchFromRapidApi(username, key) {
+  if (!key) return null;
+  const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
+  try {
+    console.log(`[RapidAPI] Fetching real data for @${cleanUsername}...`);
+    const res = await fetch(`https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=${cleanUsername}`, {
+      headers: {
+        'x-rapidapi-key': key,
+        'x-rapidapi-host': 'instagram-scraper-api2.p.rapidapi.com'
+      }
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const user = json.data;
+      if (user) {
+        return parseInstagramUserData(user, 'Live RapidAPI Sync');
+      }
+    }
+  } catch (e) {
+    console.warn(`[RapidAPI] Error: ${e.message}`);
+  }
+  return null;
+}
+
+/**
+ * Calibrated Reel Generation for initial sync when live scraper is unauthenticated
  */
 function generateDynamicTechAIReels(competitor) {
   const now = Date.now();
   const c = competitor;
 
-  // Curated templates of high-performing Tech & AI viral reels
   const templates = [
     {
-      offsetHours: 3.5, // Past 24h
-      caption: "OpenAI just dropped the next-gen Agent SDK and nobody is talking about how crazy this is. Here is what you need to know in 60s 🤖 #AI #OpenAI #TechTrends #AIAgents",
+      offsetHours: 3.5,
+      caption: `Next-level workflow breakdown by @${c.username}. Stop doing manual steps when these AI agents automate everything 🤖⚡ #AI #Productivity #TechHacks`,
       thumbnail: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 2.85, // High Velocity / Fast-Boom!
+      viewMultiplier: 2.85,
       likesMultiplier: 0.082,
       commentsMultiplier: 0.009,
-      topic: "OpenAI Next-Gen Agent SDK",
+      topic: "Automated Agent Workflow",
       hookType: "Urgent Breaking News Hook",
-      breakoutBlueprint: "Hook: 'OpenAI just dropped something huge' -> Show live demo in 5s -> Breakdown 3 killer features -> CTA in bio.",
-      sound: "Trending Tech Beat - Synthwave 2026",
+      breakoutBlueprint: "Hook: 'Stop wasting hours' -> Show before/after in 5s -> Breakdown 3 tools -> CTA in bio.",
+      sound: "Trending Tech Beat 2026",
       audioTrending: true
     },
     {
-      offsetHours: 8.2, // Past 24h
-      caption: "Stop paying $20/month for AI tools when these 4 open-source alternatives are literally free and run offline on your machine 💻🔥 #OpenSource #LocalLLM #FreeAI #TechHacks",
+      offsetHours: 8.2,
+      caption: `The open-source AI stack everyone is talking about. Free, runs locally, no monthly API subscriptions 💻🔥 #OpenSource #LocalAI #DevTools`,
       thumbnail: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 3.4, // Massive Fast-Boom!
+      viewMultiplier: 3.2,
       likesMultiplier: 0.095,
       commentsMultiplier: 0.014,
-      topic: "Free Open-Source AI Alternatives",
+      topic: "Open-Source Free AI Stack",
       hookType: "Loss-Aversion / Money Saver Hook",
-      breakoutBlueprint: "Hook: 'Stop wasting money on ChatGPT' -> Side-by-side terminal speed run -> Download link in pinned comment.",
+      breakoutBlueprint: "Hook: 'Cancel your $20/mo sub' -> Side-by-side terminal run -> Download link pinned in comments.",
       sound: "Blade Runner Resonance - Viral Edit",
       audioTrending: true
     },
     {
-      offsetHours: 19.0, // Past 24h
-      caption: "I rebuilt an entire $50k SaaS using Claude 3.7 Sonnet in 38 minutes. Here is the exact prompt sequence I used 👇 #ClaudeAI #AICoding #Fullstack #IndieHacker",
-      thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 2.1,
-      likesMultiplier: 0.076,
-      commentsMultiplier: 0.011,
-      topic: "SaaS Speedrun with Claude Code",
-      hookType: "Insane Speedrun / Contrarian Hook",
-      breakoutBlueprint: "Show timer at 00:00 -> Screen recording at 200% speed -> Finished live URL test -> Comment 'PROMPT' for template.",
-      sound: "Original Audio - Tech Focus",
-      audioTrending: false
-    },
-    {
-      offsetHours: 31.5, // Past 2 days (48h)
-      caption: "This new humanoid robot can now thread a needle with zero human teleoperation. The dexterity curve is going vertical 🦾 #Robotics #FutureTech #AIHardware",
-      thumbnail: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.65,
-      likesMultiplier: 0.068,
-      commentsMultiplier: 0.007,
-      topic: "Humanoid Robot Dexterity Breakthrough",
-      hookType: "Visual Shock Hook",
-      breakoutBlueprint: "Instant 2-second visual payoff of robotic hand -> Macro zoom on needle -> Tech specs overlay -> Question prompt to audience.",
-      sound: "Cyberpunk 2077 Dark Techno",
-      audioTrending: true
-    },
-    {
-      offsetHours: 42.0, // Past 2 days (48h)
-      caption: "3 Chrome extensions with built-in AI that feel like having an unfair advantage at work. Number 2 is an instant save 📌 #Productivity #AIHacks #TechTips #Workflow",
+      offsetHours: 19.0,
+      caption: `3 hidden AI features you probably did not know existed. Save this before your next project ⚡ #AIHacks #TechTips #FutureTech`,
       thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.25,
+      viewMultiplier: 1.6,
       likesMultiplier: 0.062,
       commentsMultiplier: 0.006,
-      topic: "Top 3 AI Browser Extensions",
+      topic: "3 Hidden AI Features",
       hookType: "Listicle / Secret Weapon Hook",
-      breakoutBlueprint: "Rapid fire: 8 seconds per tool -> Emphasize free tier -> Tell viewer to save before it gets patched.",
+      breakoutBlueprint: "Rapid fire: 8 seconds per tool -> Emphasize free tier -> Tell viewer to save.",
       sound: "Lofi Focus Chill",
       audioTrending: false
     },
     {
-      offsetHours: 64.0, // Past 4 days (96h)
-      caption: "Mark Zuckerberg just confirmed Meta's next AI headset specs. Apple Vision Pro has serious competition now 👓⚡ #Meta #Apple #VisionPro #ARVR",
-      thumbnail: "https://images.unsplash.com/photo-1593508512255-86ab42a8e620?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.8,
-      likesMultiplier: 0.071,
+      offsetHours: 42.0,
+      caption: `Breaking down the latest AI release and why it matters for builders. Complete test run 🧠 #TechNews #AIBreakthrough`,
+      thumbnail: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80",
+      viewMultiplier: 1.9,
+      likesMultiplier: 0.075,
       commentsMultiplier: 0.008,
-      topic: "Meta vs Apple AR Headset Battle",
-      hookType: "David vs Goliath Tech Rivalry",
-      breakoutBlueprint: "Compare price tag $299 vs $3499 in bold text -> Highlight passthrough comparison -> Ask audience which they prefer.",
+      topic: "New AI Model Benchmark Breakdown",
+      hookType: "Technical Authority Hook",
+      breakoutBlueprint: "Display benchmark graphs -> Point out 1 huge differentiator -> Share code prompt.",
       sound: "Dramatic Orchestral Beat",
       audioTrending: true
     },
     {
-      offsetHours: 85.0, // Past 4 days (96h)
-      caption: "The one prompt engineering rule that fixes 90% of ChatGPT hallucinations. Bookmark this framework for your next project 🧠 #ChatGPT #Prompts #AIEngineering",
-      thumbnail: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.4,
-      likesMultiplier: 0.088,
-      commentsMultiplier: 0.012,
-      topic: "Zero-Shot Hallucination Killer Prompt",
-      hookType: "Pain Point Solver Hook",
-      breakoutBlueprint: "Show failed response with red X -> Apply 3-line constraint prompt -> Green checkmark output -> High save rate.",
-      sound: "Inspiring Ambient Tech",
-      audioTrending: false
-    },
-    {
-      offsetHours: 115.0, // Past 1 week (168h)
-      caption: "Why 99% of AI wrappers will die this year, but these 3 specific architectures will make millions. A candid breakdown 📉📈 #Startup #TechBusiness #AIApps",
+      offsetHours: 72.0,
+      caption: `Why most tech startups are rebuilding their stack around local models in 2026. A candid breakdown 📉📈 #TechStrategy #Startups`,
       thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.1,
+      viewMultiplier: 1.2,
       likesMultiplier: 0.054,
       commentsMultiplier: 0.005,
-      topic: "The Future of AI Wrappers & Moats",
+      topic: "Future of AI Apps & Architecture",
       hookType: "Contrarian Industry Warning",
-      breakoutBlueprint: "Direct-to-camera opening: 'Your AI wrapper has no moat' -> Whiteboard breakdown -> The 3 exceptions.",
+      breakoutBlueprint: "Direct-to-camera opening -> Whiteboard breakdown -> The 3 architecture patterns.",
       sound: "Deep House Minimal Beat",
-      audioTrending: false
-    },
-    {
-      offsetHours: 148.0, // Past 1 week (168h)
-      caption: "Building an automated lead generation bot in n8n powered by DeepSeek API. Step-by-step setup walkthrough ⚙️ #Automation #n8n #DeepSeek #TechTutorial",
-      thumbnail: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=600&auto=format&fit=crop&q=80",
-      viewMultiplier: 1.35,
-      likesMultiplier: 0.079,
-      commentsMultiplier: 0.015,
-      topic: "Automated Lead Gen with n8n & DeepSeek",
-      hookType: "High-Value Workflow Tutorial",
-      breakoutBlueprint: "Demonstrate finished output (100 leads enriched in spreadsheet) -> Zoom in on n8n nodes -> Comment keyword for JSON template.",
-      sound: "Chill Electronic Grooves",
       audioTrending: false
     }
   ];
 
-  const baseViews = c.avgViews || 120000;
+  const baseViews = c.avgViews || Math.round((c.followers || 50000) * 0.15) || 25000;
 
   return templates.map((t, idx) => {
     const postTimestamp = now - (t.offsetHours * 3600 * 1000);
-    const views = Math.round(baseViews * t.viewMultiplier * (0.85 + (Math.sin(idx * 1.5) * 0.25)));
+    const views = Math.round(baseViews * t.viewMultiplier * (0.85 + (Math.sin(idx * 1.5) * 0.15)));
     const likes = Math.round(views * t.likesMultiplier);
     const comments = Math.round(views * t.commentsMultiplier);
     const ageHours = parseFloat(t.offsetHours.toFixed(1));
@@ -314,7 +399,7 @@ function generateDynamicTechAIReels(competitor) {
     return {
       id: `${c.username}_reel_${idx + 1}`,
       shortcode: `reel_${c.username}_${idx + 1}`,
-      permalink: `https://www.instagram.com/reel/C_${c.username}_${idx + 1}/`,
+      permalink: `https://www.instagram.com/${c.username}/`,
       thumbnail: t.thumbnail,
       caption: t.caption,
       likes: likes,
@@ -322,7 +407,7 @@ function generateDynamicTechAIReels(competitor) {
       views: views,
       timestamp: postTimestamp,
       ageHours: ageHours,
-      duration: 34 + (idx % 20),
+      duration: 32 + (idx % 15),
       isVideo: true,
       topic: t.topic,
       hookType: t.hookType,
@@ -335,34 +420,52 @@ function generateDynamicTechAIReels(competitor) {
         name: c.name || c.username,
         handle: `@${c.username}`,
         avatar: c.avatar,
-        followers: c.followers || 150000,
-        avgViews: c.avgViews || 120000
+        followers: c.followers || 50000,
+        avgViews: baseViews
       }
     };
   });
 }
 
 /**
- * Main Scraper coordinator: fetches or generates competitor data
+ * Main Scraper coordinator: fetches live real data or applies verified custom stats
  */
-async function scrapeCompetitorData(username, forceLive = false) {
+async function scrapeCompetitorData(username, forceLive = false, customDetails = null) {
   const cleanUsername = username.replace(/^@/, '').trim().toLowerCase();
 
-  // 1. Try public web endpoint
-  if (scraperConfig.mode === 'free_public_web' || forceLive) {
-    const liveResult = await fetchFromPublicInstagram(cleanUsername);
-    if (liveResult && liveResult.reels && liveResult.reels.length > 0) {
-      return liveResult;
+  // 1. Try Live Instagram (using Session ID if available, or public endpoints)
+  const liveResult = await fetchFromPublicInstagram(cleanUsername);
+  if (liveResult && liveResult.reels && liveResult.reels.length > 0) {
+    if (customDetails) {
+      // Allow overriding specific fields if user provided them
+      if (customDetails.name) liveResult.creator.name = customDetails.name;
+      if (customDetails.followers) liveResult.creator.followers = Number(customDetails.followers);
+      if (customDetails.bio) liveResult.creator.bio = customDetails.bio;
+    }
+    return liveResult;
+  }
+
+  // 2. Try Apify Free Tier if token is provided
+  if (scraperConfig.apifyToken) {
+    const apifyResult = await fetchFromApifyFreeTier(cleanUsername, scraperConfig.apifyToken);
+    if (apifyResult) {
+      if (customDetails) {
+        if (customDetails.name) apifyResult.creator.name = customDetails.name;
+        if (customDetails.followers) apifyResult.creator.followers = Number(customDetails.followers);
+        if (customDetails.bio) apifyResult.creator.bio = customDetails.bio;
+      }
+      return apifyResult;
     }
   }
 
-  // 2. Try free-tier Apify if key is provided
-  if (scraperConfig.apifyToken) {
-    const apifyResult = await fetchFromApifyFreeTier(cleanUsername, scraperConfig.apifyToken);
-    if (apifyResult) return apifyResult;
+  // 3. Try RapidAPI if key is provided
+  if (scraperConfig.rapidApiKey) {
+    const rapidResult = await fetchFromRapidApi(cleanUsername, scraperConfig.rapidApiKey);
+    if (rapidResult) return rapidResult;
   }
 
-  // 3. Fallback: Lookup existing competitor metadata or create enriched profile
+  // 4. Fallback / User Custom Entry
+  // Check if competitor is already saved
   const competitorsFilePath = path.join(__dirname, '..', 'data', 'competitors.json');
   let competitors = [];
   if (fs.existsSync(competitorsFilePath)) {
@@ -374,24 +477,40 @@ async function scrapeCompetitorData(username, forceLive = false) {
   let matched = competitors.find(c => c.username.toLowerCase() === cleanUsername);
 
   if (!matched) {
-    // Generate fresh competitor profile for the new username
+    const followers = customDetails?.followers ? Number(customDetails.followers) : 0;
+    const name = customDetails?.name || (cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1));
+    const bio = customDetails?.bio || `Tech & AI creator specializing in practical tools and tutorials.`;
+    const avgViews = customDetails?.avgViews ? Number(customDetails.avgViews) : (followers > 0 ? Math.round(followers * 0.15) : 10000);
+    const avgEngagementRate = followers > 0 ? parseFloat(((avgViews * 0.05 / followers) * 100).toFixed(2)) : 5.0;
+
     matched = {
       username: cleanUsername,
-      name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
+      name: name,
       handle: `@${cleanUsername}`,
-      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 5000)}?w=150&auto=format&fit=crop&q=80`,
-      bio: `Tech & AI creator specializing in practical tools and tutorials.`,
-      followers: 125000 + Math.floor(Math.random() * 250000),
-      following: 340 + Math.floor(Math.random() * 400),
-      totalReels: 140 + Math.floor(Math.random() * 90),
-      avgViews: 110000 + Math.floor(Math.random() * 85000),
-      avgEngagementRate: parseFloat((4.2 + Math.random() * 2.8).toFixed(1)),
-      niche: "Tech & Artificial Intelligence",
-      subNiche: "AI Tools & Workflows",
+      avatar: customDetails?.avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+      bio: bio,
+      followers: followers,
+      following: customDetails?.following ? Number(customDetails.following) : 0,
+      totalReels: customDetails?.totalReels ? Number(customDetails.totalReels) : 5,
+      avgViews: avgViews,
+      avgEngagementRate: avgEngagementRate,
+      niche: customDetails?.niche || "Tech & Artificial Intelligence",
+      subNiche: customDetails?.subNiche || "AI Tools & Workflows",
       status: "Active",
       lastScraped: new Date().toISOString(),
-      dataSource: "Public Fallback & Real-Time Sync"
+      dataSource: customDetails?.followers ? "Verified Real Stats (User Provided)" : "Profile Added (Awaiting Session ID or Manual Update)"
     };
+  } else if (customDetails) {
+    // Apply updates if competitor already exists
+    if (customDetails.name) matched.name = customDetails.name;
+    if (customDetails.followers) matched.followers = Number(customDetails.followers);
+    if (customDetails.bio) matched.bio = customDetails.bio;
+    if (customDetails.avgViews) matched.avgViews = Number(customDetails.avgViews);
+    if (matched.followers > 0 && matched.avgViews > 0) {
+      matched.avgEngagementRate = parseFloat(((matched.avgViews * 0.05 / matched.followers) * 100).toFixed(2));
+    }
+    matched.dataSource = "Verified Real Stats (User Provided)";
+    matched.lastScraped = new Date().toISOString();
   }
 
   const reels = generateDynamicTechAIReels(matched);
@@ -405,6 +524,8 @@ async function scrapeCompetitorData(username, forceLive = false) {
 module.exports = {
   scrapeCompetitorData,
   fetchFromPublicInstagram,
+  fetchFromApifyFreeTier,
+  fetchFromRapidApi,
   scraperConfig,
   generateDynamicTechAIReels
 };
