@@ -16,9 +16,9 @@ const USER_AGENTS = [
 
 // In-memory or file-backed storage config
 let scraperConfig = {
-  mode: 'free_public_web', // 'free_public_web' | 'apify_free' | 'rapidapi_free'
-  apifyToken: '',
-  rapidApiKey: '',
+  mode: process.env.SCRAPER_MODE || 'free_public_web', // 'free_public_web' | 'apify_free' | 'rapidapi_free'
+  apifyToken: process.env.APIFY_TOKEN || '',
+  rapidApiKey: process.env.RAPIDAPI_KEY || '',
   cacheDurationMinutes: 30,
   rateLimitCooloff: 0
 };
