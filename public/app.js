@@ -545,7 +545,7 @@ function createReelCardHtml(r) {
     <article class="reel-card" data-reel-id="${r.id}">
       <div class="reel-creator-bar">
         <div class="reel-creator-meta">
-          <img src="${r.creator?.avatar}" alt="${r.creator?.name}" class="creator-avatar" loading="lazy">
+          <img src="${r.creator?.avatar}" alt="${r.creator?.name}" class="creator-avatar" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.creator?.username || 'user')}&background=8b5cf6&color=ffffff'">
           <div class="creator-info-text">
             <span class="creator-name">${escapeHtml(r.creator?.name || r.creator?.username)}</span>
             <span class="creator-handle">${escapeHtml(r.creator?.handle || '@' + r.creator?.username)}</span>
@@ -623,7 +623,7 @@ function createFastBoomCardHtml(r) {
     <article class="reel-card fastboom-card" data-reel-id="${r.id}">
       <div class="reel-creator-bar">
         <div class="reel-creator-meta">
-          <img src="${r.creator?.avatar}" alt="${r.creator?.name}" class="creator-avatar" loading="lazy">
+          <img src="${r.creator?.avatar}" alt="${r.creator?.name}" class="creator-avatar" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(r.creator?.username || 'user')}&background=8b5cf6&color=ffffff'">
           <div class="creator-info-text">
             <span class="creator-name">${escapeHtml(r.creator?.name || r.creator?.username)}</span>
             <span class="creator-handle">${escapeHtml(r.creator?.handle || '@' + r.creator?.username)}</span>
@@ -706,7 +706,7 @@ function renderCompetitorsGrid(competitors) {
   DOM.competitorsGrid.innerHTML = competitors.map(c => `
     <div class="competitor-card">
       <div class="comp-card-top">
-        <img src="${c.avatar}" alt="${c.name}" class="comp-avatar-lg" loading="lazy">
+        <img src="${c.avatar}" alt="${c.name}" class="comp-avatar-lg" loading="lazy" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(c.username)}&background=8b5cf6&color=ffffff'">
         <div class="comp-info">
           <span class="comp-name">${escapeHtml(c.name || c.username)}</span>
           <span class="comp-handle">@${escapeHtml(c.username)}</span>
